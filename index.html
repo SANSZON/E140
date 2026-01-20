@@ -867,6 +867,13 @@
                     <div class="card-text">Creación artística fan de los personajes de Ross.</div>
                 </div>
             </div>
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/artemio.jpeg" alt="Arte EDD40" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Primer dibujo de Spencer</div>
+                    <div class="card-text">Spencer es la peor persona jamas creada en el mundo , la cual muere a manos de hildreth y es la identidad que 39 toma al llegar a la tierra .</div>
+                </div>
+            </div>
             <div class="content-card">
                 <div class="card-placeholder">Próximamente</div>
             </div>
@@ -905,7 +912,7 @@
             <div class="content-card tall video-card">
                 <video src="Videos/prueba.mp4" style="width: 100%; height: 100%; object-fit: cover; pointer-events: none;" muted loop playsinline></video>
                 <div class="video-overlay">
-                    <div class="video-play-button">▶ Ver Video</div>
+                    <div class="video-play-button">▶</div>
                 </div>
                 <div class="card-description">
                     <div class="card-title">Video de Prueba</div>
@@ -957,77 +964,6 @@
     </section>
 
     <script>
-        // Sistema de likes con almacenamiento persistente
-        const STORAGE_KEY = 'edd40-likes-data';
-        let likesData = {};
-
-        // Cargar likes desde el almacenamiento
-        async function loadLikes() {
-            try {
-                const result = await window.storage.get(STORAGE_KEY);
-                if (result && result.value) {
-                    likesData = JSON.parse(result.value);
-                }
-            } catch (error) {
-                console.log('Iniciando con datos nuevos de likes');
-                likesData = {};
-            }
-        }
-
-        // Guardar likes en el almacenamiento
-        async function saveLikes() {
-            try {
-                await window.storage.set(STORAGE_KEY, JSON.stringify(likesData));
-            } catch (error) {
-                console.error('Error al guardar likes:', error);
-            }
-        }
-
-        // Inicializar sistema de likes
-        async function initLikes() {
-            await loadLikes();
-            
-            document.querySelectorAll('.like-button').forEach(btn => {
-                const itemId = btn.getAttribute('data-item');
-                
-                // Restaurar estado guardado
-                if (likesData[itemId]) {
-                    btn.classList.add('liked');
-                    btn.querySelector('.heart').textContent = '♥';
-                    btn.querySelector('.count').textContent = likesData[itemId];
-                } else {
-                    likesData[itemId] = 0;
-                }
-                
-                // Manejar clicks en botón de like
-                btn.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    await toggleLike(itemId, btn);
-                });
-            });
-        }
-
-        // Toggle like
-        async function toggleLike(itemId, btn) {
-            const heart = btn.querySelector('.heart');
-            const count = btn.querySelector('.count');
-            
-            if (btn.classList.contains('liked')) {
-                // Quitar like
-                btn.classList.remove('liked');
-                heart.textContent = '♡';
-                likesData[itemId] = Math.max(0, likesData[itemId] - 1);
-            } else {
-                // Dar like
-                btn.classList.add('liked');
-                heart.textContent = '♥';
-                likesData[itemId] = (likesData[itemId] || 0) + 1;
-            }
-            
-            count.textContent = likesData[itemId];
-            await saveLikes();
-        }
-
         // Crear partículas
         const particlesContainer = document.getElementById('particles');
         for (let i = 0; i < 30; i++) {
@@ -1111,17 +1047,12 @@
 
         // Abrir capítulo piloto
         document.getElementById('cap-piloto').addEventListener('click', (e) => {
-            // No abrir PDF si se hizo click en el botón de like
-            if (e.target.closest('.like-button')) return;
             window.open('pdfs/Cap_piloto.pdf', '_blank');
         });
 
         // Manejar clicks en imágenes
         document.querySelectorAll('.image-card').forEach(card => {
             card.addEventListener('click', (e) => {
-                // No abrir modal si se hizo click en el botón de like
-                if (e.target.closest('.like-button')) return;
-                
                 const img = card.querySelector('img');
                 if (img) {
                     const gallery = card.getAttribute('data-gallery');
@@ -1187,9 +1118,6 @@
             
             overlay.addEventListener('click', (e) => {
                 e.stopPropagation();
-                // No abrir modal si se hizo click en el botón de like
-                if (e.target.closest('.like-button')) return;
-                
                 modalVideo.src = video.src;
                 modalVideo.load();
                 videoMemeGif.src = getRandomMeme();
