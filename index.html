@@ -3,775 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EDD40 MOMENTOS </title>
-    
+    <title>EDD40 MOMENTOS</title>
+
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="Imagenes/39.png">
     <link rel="apple-touch-icon" href="Imagenes/39.png">
     <link rel="shortcut icon" href="Imagenes/39.png">
-    
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
 
-        body {
-            font-family: 'Helvetica Neue', Arial, sans-serif;
-            background: #000;
-            color: #fff;
-            overflow-x: hidden;
-        }
-
-        /* Partículas de fondo */
-        .particles {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        .particle {
-            position: absolute;
-            background: radial-gradient(circle, rgba(229, 9, 20, 0.8), transparent);
-            border-radius: 50%;
-            animation: float linear infinite;
-        }
-
-        @keyframes float {
-            0% {
-                transform: translateY(100vh) scale(0);
-                opacity: 0;
-            }
-            10% {
-                opacity: 1;
-            }
-            90% {
-                opacity: 1;
-            }
-            100% {
-                transform: translateY(-100px) scale(1);
-                opacity: 0;
-            }
-        }
-
-        /* Header/Navbar */
-        .navbar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            padding: 20px 50px;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.9), transparent);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            z-index: 1000;
-            transition: all 0.3s ease;
-        }
-
-        .navbar.scrolled {
-            background: rgba(0,0,0,0.95);
-            padding: 15px 50px;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 5px 30px rgba(229, 9, 20, 0.3);
-        }
-
-        /* Hero Section */
-        .hero {
-            position: relative;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            overflow: hidden;
-        }
-
-        .hero::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: url('https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExZWFrYnUwZmNmYnRyMG1veTVudHlyNXM2ajg5NTIyOWg4ODd6eGFsMyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/kFMEXOtC56mNukfgfN/giphy.gif') center/cover no-repeat;
-            filter: blur(10px) brightness(0.3);
-            z-index: 0;
-            transform: scale(1.1);
-            animation: slowZoom 20s ease-in-out infinite alternate;
-        }
-
-        @keyframes slowZoom {
-            0% { transform: scale(1.1); }
-            100% { transform: scale(1.2); }
-        }
-
-        .hero::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 50%;
-            background: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.7) 50%, transparent 100%);
-            z-index: 1;
-        }
-
-        .content {
-            position: relative;
-            z-index: 2;
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 0 50px;
-        }
-
-        .title-animated {
-            font-size: clamp(3rem, 8vw, 6rem);
-            font-weight: 900;
-            margin-bottom: 20px;
-            background: linear-gradient(45deg, #e50914, #ff4757, #ff6b6b, #e50914);
-            background-size: 300% 300%;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            animation: gradientShift 4s ease infinite, fadeInUp 1s ease, textGlow 2s ease-in-out infinite;
-            letter-spacing: 2px;
-            text-shadow: 0 0 30px rgba(229, 9, 20, 0.5);
-        }
-
-        @keyframes gradientShift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-
-        @keyframes textGlow {
-            0%, 100% { filter: drop-shadow(0 0 10px rgba(229, 9, 20, 0.5)); }
-            50% { filter: drop-shadow(0 0 20px rgba(229, 9, 20, 0.8)); }
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .subtitle {
-            font-size: clamp(1.2rem, 3vw, 1.8rem);
-            font-weight: 300;
-            margin-bottom: 25px;
-            color: #f0f0f0;
-            animation: fadeInUp 1s ease 0.2s backwards;
-        }
-
-        .description {
-            font-size: clamp(1rem, 2vw, 1.3rem);
-            line-height: 1.8;
-            max-width: 700px;
-            margin-bottom: 40px;
-            color: #d1d1d1;
-            animation: fadeInUp 1s ease 0.4s backwards;
-        }
-
-        /* Content Sections */
-        .content-section {
-            padding: 80px 50px;
-            background: #000;
-            position: relative;
-            z-index: 1;
-        }
-
-        .section-title {
-            font-size: clamp(2rem, 4vw, 2.5rem);
-            font-weight: 700;
-            margin-bottom: 30px;
-            color: #fff;
-            position: relative;
-            padding-bottom: 15px;
-            animation: slideInLeft 0.8s ease;
-        }
-
-        @keyframes slideInLeft {
-            from {
-                opacity: 0;
-                transform: translateX(-50px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        .section-title::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 80px;
-            height: 4px;
-            background: linear-gradient(90deg, #e50914, transparent);
-            animation: expandWidth 1s ease;
-        }
-
-        @keyframes expandWidth {
-            from { width: 0; }
-            to { width: 80px; }
-        }
-
-        .content-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 50px;
-        }
-
-        .content-row.featured {
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        }
-
-        .content-row.compact {
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-
-        .content-card {
-            position: relative;
-            border-radius: 12px;
-            overflow: hidden;
-            cursor: pointer;
-            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            background: #1a1a1a;
-            height: 150px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-        }
-
-        .content-card.tall {
-            height: 350px;
-        }
-
-        .content-card.medium {
-            height: 250px;
-        }
-
-        .content-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(45deg, transparent, rgba(229, 9, 20, 0.1), transparent);
-            transform: translateX(-100%);
-            transition: transform 0.6s ease;
-            z-index: 1;
-        }
-
-        .content-card:hover::before {
-            transform: translateX(100%);
-        }
-
-        .content-card:hover {
-            transform: translateY(-10px) scale(1.03);
-            box-shadow: 0 20px 40px rgba(229, 9, 20, 0.4), 0 0 30px rgba(229, 9, 20, 0.2);
-            border: 2px solid rgba(229, 9, 20, 0.3);
-        }
-
-        .content-card:hover .card-description {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .card-description {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            padding: 15px;
-            background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.8) 80%, transparent 100%);
-            color: #fff;
-            opacity: 0;
-            transform: translateY(10px);
-            transition: all 0.3s ease;
-            pointer-events: none;
-            z-index: 10;
-        }
-
-        .card-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            margin-bottom: 5px;
-            color: #e50914;
-        }
-
-        .card-text {
-            font-size: 0.9rem;
-            line-height: 1.4;
-            color: #d1d1d1;
-        }
-
-        .card-placeholder {
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #666;
-            font-size: 1rem;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .card-placeholder::before {
-            content: '';
-            position: absolute;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, transparent, rgba(229, 9, 20, 0.05), transparent);
-            animation: shimmer 3s infinite;
-        }
-
-        @keyframes shimmer {
-            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
-            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
-        }
-
-        /* Sistema de likes */
-        .like-button {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.8);
-            border: 2px solid #e50914;
-            color: #fff;
-            padding: 8px 15px;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-weight: 700;
-            z-index: 15;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            backdrop-filter: blur(10px);
-        }
-
-        .like-button:hover {
-            background: rgba(229, 9, 20, 0.9);
-            transform: scale(1.1);
-            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.5);
-        }
-
-        .like-button.liked {
-            background: #e50914;
-            border-color: #ff1a1a;
-        }
-
-        .like-button .heart {
-            font-size: 1.2rem;
-            transition: transform 0.3s ease;
-        }
-
-        .like-button.liked .heart {
-            animation: heartBeat 0.6s ease;
-        }
-
-        @keyframes heartBeat {
-            0%, 100% { transform: scale(1); }
-            25% { transform: scale(1.3); }
-            50% { transform: scale(1.1); }
-            75% { transform: scale(1.2); }
-        }
-
-        /* Modales mejorados */
-        .video-modal,
-        .image-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.97);
-            z-index: 10000;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            animation: fadeIn 0.3s ease;
-            backdrop-filter: blur(5px);
-        }
-
-        .video-modal.active,
-        .image-modal.active {
-            display: flex;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        .modal-content-wrapper {
-            position: relative;
-            max-width: 90%;
-            max-height: 90%;
-            display: flex;
-            flex-direction: row;
-            align-items: center;
-            justify-content: center;
-            gap: 30px;
-        }
-
-        .modal-video,
-        .modal-image {
-            max-width: 60%;
-            max-height: 85vh;
-            border-radius: 12px;
-            box-shadow: 0 30px 80px rgba(229, 9, 20, 0.6);
-            animation: zoomIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-
-        @keyframes zoomIn {
-            from {
-                transform: scale(0.8);
-                opacity: 0;
-            }
-            to {
-                transform: scale(1);
-                opacity: 1;
-            }
-        }
-
-        /* Descripción en modal */
-        .modal-description {
-            padding: 30px;
-            background: rgba(0, 0, 0, 0.9);
-            border-radius: 12px;
-            max-width: 400px;
-            width: 35%;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(229, 9, 20, 0.3);
-            animation: slideInRight 0.5s ease 0.2s backwards;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        @keyframes slideInRight {
-            from {
-                opacity: 0;
-                transform: translateX(50px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        .modal-description .card-title {
-            font-size: 1.8rem;
-            margin-bottom: 10px;
-        }
-
-        .modal-description .card-text {
-            font-size: 1.1rem;
-            line-height: 1.6;
-        }
-
-        /* Controles de galería */
-        .gallery-controls {
-            position: fixed;
-            bottom: 15px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            z-index: 10002;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 8px 15px;
-            border-radius: 30px;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
-            animation: slideUp 0.5s ease;
-        }
-
-        @keyframes slideUp {
-            from {
-                transform: translateX(-50%) translateY(100px);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(-50%) translateY(0);
-                opacity: 1;
-            }
-        }
-
-        .gallery-btn {
-            background: #e50914;
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 3px 10px rgba(229, 9, 20, 0.3);
-        }
-
-        .gallery-btn:hover {
-            background: #ff1a1a;
-            transform: scale(1.05);
-            box-shadow: 0 5px 15px rgba(229, 9, 20, 0.5);
-        }
-
-        .gallery-btn:active {
-            transform: scale(0.95);
-        }
-
-        .gallery-counter {
-            color: #fff;
-            font-size: 0.85rem;
-            font-weight: 600;
-            padding: 0 10px;
-            min-width: 60px;
-            text-align: center;
-        }
-
-        .meme-gif {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 150px;
-            height: 150px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.5);
-            border: 3px solid #e50914;
-            object-fit: cover;
-            animation: bounceIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-            z-index: 10002;
-        }
-
-        @keyframes bounceIn {
-            0% {
-                transform: scale(0) rotate(-180deg);
-                opacity: 0;
-            }
-            50% {
-                transform: scale(1.2) rotate(10deg);
-            }
-            100% {
-                transform: scale(1) rotate(0deg);
-                opacity: 1;
-            }
-        }
-
-        .close-modal {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            background: #e50914;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 8px;
-            font-size: 1.2rem;
-            font-weight: 700;
-            cursor: pointer;
-            z-index: 10001;
-            transition: all 0.3s ease;
-            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.5);
-        }
-
-        .close-modal:hover {
-            background: #ff1a1a;
-            transform: scale(1.1);
-        }
-
-        .close-modal:active {
-            transform: scale(0.95);
-        }
-
-        /* Video overlay */
-        .video-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: background 0.3s ease;
-            z-index: 2;
-        }
-
-        .video-overlay:hover {
-            background: rgba(0,0,0,0.5);
-        }
-
-        .video-play-button {
-            background: rgba(229, 9, 20, 0.9);
-            padding: 15px 30px;
-            border-radius: 8px;
-            font-size: 1.2rem;
-            font-weight: 700;
-            transition: all 0.3s ease;
-            box-shadow: 0 5px 20px rgba(229, 9, 20, 0.5);
-        }
-
-        .video-overlay:hover .video-play-button {
-            background: #e50914;
-            transform: scale(1.1);
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .content,
-            .content-section {
-                padding: 40px 20px;
-            }
-            
-            .navbar {
-                padding: 15px 20px;
-            }
-
-            .navbar.scrolled {
-                padding: 10px 20px;
-            }
-            
-            .meme-gif {
-                width: 100px;
-                height: 100px;
-                top: 10px;
-                right: 10px;
-            }
-            
-            .content-row,
-            .content-row.featured {
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-                gap: 15px;
-            }
-
-            .content-row.compact {
-                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-                gap: 10px;
-            }
-
-            .gallery-controls {
-                bottom: 10px;
-                padding: 6px 12px;
-                gap: 8px;
-            }
-
-            .gallery-btn {
-                padding: 6px 12px;
-                font-size: 0.8rem;
-            }
-
-            .gallery-counter {
-                font-size: 0.8rem;
-                min-width: 50px;
-                padding: 0 8px;
-            }
-
-            .close-modal {
-                padding: 12px 20px;
-                font-size: 1rem;
-            }
-
-            .content-card.tall {
-                height: 250px;
-            }
-
-            .content-card.medium {
-                height: 200px;
-            }
-
-            .modal-content-wrapper {
-                flex-direction: column;
-                gap: 15px;
-            }
-
-            .modal-image {
-                max-width: 90%;
-                max-height: 50vh;
-            }
-
-            .modal-description {
-                width: 90%;
-                max-width: 90%;
-                padding: 20px;
-            }
-
-            .modal-description .card-title {
-                font-size: 1.3rem;
-            }
-
-            .modal-description .card-text {
-                font-size: 1rem;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .content-row,
-            .content-row.featured,
-            .content-row.compact {
-                grid-template-columns: 1fr;
-            }
-
-            .meme-gif {
-                width: 80px;
-                height: 80px;
-            }
-        }
-
-        /* Scroll indicator */
-        .scroll-indicator {
-            position: absolute;
-            bottom: 40px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 2;
-            animation: bounce 2s infinite;
-        }
-
-        @keyframes bounce {
-            0%, 20%, 50%, 80%, 100% { transform: translateX(-50%) translateY(0); }
-            40% { transform: translateX(-50%) translateY(-10px); }
-            60% { transform: translateX(-50%) translateY(-5px); }
-        }
-
-        .scroll-indicator::before {
-            content: '⌄';
-            font-size: 3rem;
-            color: rgba(255,255,255,0.7);
-            filter: drop-shadow(0 0 10px rgba(229, 9, 20, 0.5));
-        }
-
-        /* Efecto de brillo en imágenes */
-        .content-card img {
-            transition: all 0.4s ease;
-        }
-
-        .content-card:hover img {
-            filter: brightness(1.1) contrast(1.05);
-            transform: scale(1.05);
-        }
-    </style>
+    <!-- ✅ CSS EXTERNO -->
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
     <!-- Partículas -->
     <div class="particles" id="particles"></div>
 
@@ -786,7 +29,7 @@
             <p class="description">
                 Hola, soy EDD40, creador de contenido pasivo y mente detrás de BLOOODTITANS, una serie web cómic nacida como un refugio para mis ideas.
                 No es una historia de héroes invencibles ni de dioses todopoderosos. Es un viaje para escapar de la oscuridad que muchas veces construimos nosotros mismos, y en ese proceso, inventar esperanza donde parecía no haberla.
-                También soy artista e inventor. Creo con las manos, imagino con la mente y persigo un sueño que me acompaña desde siempre: algún día volar, no por magia, sino por algo creado por mí , Tambien comparto creacciones de parte de Ross el creador de Legends la cual comparte mismo universo que en mis historias que yo hago con mis personajes .
+                También soy artista e inventor. Creo con las manos, imagino con la mente y persigo un sueño que me acompaña desde siempre: algún día volar, no por magia, sino por algo creado por mí. Tambien comparto creacciones de parte de Ross el creador de Legends la cual comparte mismo universo que en mis historias que yo hago con mis personajes.
             </p>
         </div>
         <div class="scroll-indicator"></div>
@@ -819,490 +62,214 @@
         </div>
     </div>
 
-<!-- Sección BLOOODTITANS -->
-<section class="content-section">
-    <h2 class="section-title">Comics y Curiosidades</h2>
+    <!-- ========== SECCIÓN: COMICS Y CURIOSIDADES ========== -->
+    <section class="content-section">
+        <h2 class="section-title">Comics y Curiosidades</h2>
 
-    <div class="content-row featured">
-        <div class="content-card tall" id="cap-piloto">
-            <img src="Imagenes/Cap_piloto_portada.png" alt="Blood Titans - Capítulo Piloto" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Capítulo Piloto</div>
-                <div class="card-text">
-                    El inicio de la historia. Tres seres inmortales llegan a la Tierra desde Marte.
-                </div>
-            </div>
-        </div>
-
-        
-        
-        
         <div class="content-row featured">
-        <div class="content-card tall" id="legends-primer-capitulo">
-            <img src="Imagenes/portadadeld.png" alt="Legends - Capítulo 1" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <script>
-document.getElementById('legends-primer-capitulo').addEventListener('click', () => {
-    window.open('pdfs/Legends.pdf', '_blank');
-});
-</script>
 
-                <div class="card-title">Legends - Capítulo 1 / Por Ross </div>
-                <div class="card-text">
-                    Un chico con poderes Electricos aprende a ser un verdadero héroe.
+            <!-- Capítulo Piloto -->
+            <div class="content-card tall" id="cap-piloto">
+                <img src="Imagenes/Cap_piloto_portada.png" alt="Blood Titans - Capítulo Piloto" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Capítulo Piloto</div>
+                    <div class="card-text">El inicio de la historia. Tres seres inmortales llegan a la Tierra desde Marte.</div>
                 </div>
             </div>
-        </div>
 
+            <!-- Galería BLOOODTITANS -->
+            <div class="content-row featured">
 
-
-
-        <div class="content-card image-card" data-gallery="blooodtitans">
-            <img src="Imagenes/Dibujorodri.jpeg" alt="Blood Titans - Concepto Ross" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Concepto remake por Ross</div>
-                <div class="card-text">
-                    Primeros bocetos del rediseño del personaje para la serie.
+                <!-- Legends Capítulo 1 -->
+                <div class="content-card tall" id="legends-primer-capitulo">
+                    <img src="Imagenes/portadadeld.png" alt="Legends - Capítulo 1" style="width: 100%; height: 100%; object-fit: cover;">
+                    <div class="card-description">
+                        <div class="card-title">Legends - Capítulo 1 / Por Ross</div>
+                        <div class="card-text">Un chico con poderes Eléctricos aprende a ser un verdadero héroe.</div>
+                    </div>
                 </div>
-            </div>
-        </div>
 
-        <div class="content-card image-card" data-gallery="blooodtitans">
-            <img src="Imagenes/Primerospersonajes.jpeg" alt="Blood Titans - Protagonistas" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Los Protagonistas</div>
-                <div class="card-text">
-                    El 39, Tron, JL y Crastaco. Los cuatro sobrevivientes de Marte.
+                <div class="content-card image-card" data-gallery="blooodtitans">
+                    <img src="Imagenes/Dibujorodri.jpeg" alt="Blood Titans - Concepto Ross" style="width: 100%; height: 100%; object-fit: cover;">
+                    <div class="card-description">
+                        <div class="card-title">Concepto remake por Ross</div>
+                        <div class="card-text">Primeros bocetos del rediseño del personaje para la serie.</div>
+                    </div>
                 </div>
-            </div>
-        </div>
 
-        <div class="content-card image-card" data-gallery="blooodtitans">
-            <img src="Imagenes/jl.jpg" alt="Blood Titans - JL" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">JL</div>
-                <div class="card-text">
-                    Personaje que se comunica mediante gemidos.
+                <div class="content-card image-card" data-gallery="blooodtitans">
+                    <img src="Imagenes/Primerospersonajes.jpeg" alt="Blood Titans - Protagonistas" style="width: 100%; height: 100%; object-fit: cover;">
+                    <div class="card-description">
+                        <div class="card-title">Los Protagonistas</div>
+                        <div class="card-text">El 39, Tron, JL y Crastaco. Los cuatro sobrevivientes de Marte.</div>
+                    </div>
                 </div>
-            </div>
-        </div>
 
-        <div class="content-card image-card" data-gallery="blooodtitans">
-            <img src="Imagenes/dfg.jpg" alt="Blood Titans - El 39" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">El 39</div>
-                <div class="card-text">
-                    Una de las primeras ilustraciones del personaje.
+                <div class="content-card image-card" data-gallery="blooodtitans">
+                    <img src="Imagenes/jl.jpg" alt="Blood Titans - JL" style="width: 100%; height: 100%; object-fit: cover;">
+                    <div class="card-description">
+                        <div class="card-title">JL</div>
+                        <div class="card-text">Personaje que se comunica mediante gemidos.</div>
+                    </div>
                 </div>
-            </div>
-        </div>
-        <!-- un poco mas tarde  -->
 
-        
-    </div>
-</section>
-
-<!-- Sección Arte -->
-<section class="content-section">
-    <h2 class="section-title">Más Contenido</h2>
-
-    <div class="content-row">
-
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/WhatsApp Image 2026-01-02 at 7.37.04 PM.jpeg" alt="Recargo fan de Ross" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Recargo fan de personajes de Ross</div>
-                <div class="card-text">
-                    Creación artística fan basada en los personajes de Ross.
+                <div class="content-card image-card" data-gallery="blooodtitans">
+                    <img src="Imagenes/dfg.jpg" alt="Blood Titans - El 39" style="width: 100%; height: 100%; object-fit: cover;">
+                    <div class="card-description">
+                        <div class="card-title">El 39</div>
+                        <div class="card-text">Una de las primeras ilustraciones del personaje.</div>
+                    </div>
                 </div>
-            </div>
-        </div>
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/Versiones humanas.jpeg" alt="Recargo fan de Ross" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Diseños mas favorables para el web comic </div>
-                <div class="card-text">
-                    Para mi se me hace mas comodo y facil de hacer , pero se necesita mucha paciencia para hacerlo bien.
-                </div>
-            </div>
-        </div>
-        
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/Los primeros.jpg" alt="Recargo fan de Ross" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Primeros bocetos de BLOOODTITANS</div>
-                <div class="card-text">
-                    Los primeros bocetos de los blooodtitans , incluyendo a El39 en sus primeros diseños , JL ahora como un lovo con boca rasgada , crastaco y Unidad.
-                </div>
-            </div>
-        </div>
 
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/blootitanes.jpg" alt="Recargo fan de Ross" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Uno de los pe ultimos diseños</div>
-                <div class="card-text">
-                    Uno de los ultimos diseños de 39 , jl , Crastaco y unidad (no es tron , es otro personaje ).
-                </div>
-            </div>
-        </div>
-
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/artemio.jpeg" alt="Primer dibujo de Spencer" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Primer dibujo de Spencer</div>
-                <div class="card-text">
-                    Spencer es la peor persona jamás creada. Muere a manos de Hildreth y su identidad es tomada por El 39 al llegar a la Tierra.
-                </div>
-            </div>
-        </div>
-
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/Crastaco primer diseño .jpeg" alt="Primer diseño de Crastaco" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Primer diseño de Crastaco</div>
-                <div class="card-text">
-                    Inspirado en reptiles. Un monstruo general de un solo ojo y color morado, símbolo de misterio, poder, ambición y lo sobrenatural.
-                </div>
-            </div>
-        </div>
-
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/Segundo diseño de Crastaco.jpeg" alt="Segundo diseño de Crastaco" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Segundo diseño de Crastaco</div>
-                <div class="card-text">
-                    Aquí comienza a tomar forma la armadura de Crastaco.
-                </div>
-            </div>
-        </div>
-
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/JL y crastaco segundo diseño.jpeg" alt="Crastaco y JL" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Tercer diseño de Crastaco y primer diseño de JL</div>
-                <div class="card-text">
-                    Crastaco ya posee su característico gran ojo. A su lado, el primer diseño de JL de espaldas.
-                </div>
-            </div>
-        </div>
-
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/Primer diseño de JL.jpeg" alt="Primer diseño de JL" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Primer diseño de JL</div>
-                <div class="card-text">
-                    JL comenzó como un oso silencioso con lentes de sol, creado para un videojuego que desarrollé para un amigo.
-                </div>
-            </div>
-        </div>
-
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/reross.jpeg" alt="Detalles del recargo fan" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Detalles del recargo fan</div>
-                <div class="card-text">
-                    Detalles de la portada del cómic de Ross durante el proceso del recargo fan.
-                </div>
-            </div>
-        </div>
-
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/videoboss.jpeg" alt="Primera aparición de Crastaco" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Primera aparición planeada de Crastaco</div>
-                <div class="card-text">
-                    Crastaco estaba pensado como el jefe final del videojuego A Lonely Holiday en diciembre de 2020.
-                </div>
-            </div>
-        </div>
-
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/todo a mano.jpeg" alt="Trabajo hecho a mano" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Todo a mano</div>
-                <div class="card-text">
-                    Todo el capítulo piloto fue realizado completamente a mano y guardado en carpetas físicas.
-                </div>
-            </div>
-        </div>
-
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/calle.jpeg" alt="Dibujo de calle" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Dibujo de calle</div>
-                <div class="card-text">
-                    Ilustración de un escenario del videojuego A Lonely Holiday.
-                </div>
-            </div>
-        </div>
-
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/39 colores.jpeg" alt="Colores de El 39" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">El 39 y su paleta de colores</div>
-                <div class="card-text">
-                    Colores y texturas definitivas del personaje El 39.
-                </div>
-            </div>
-        </div>
-
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/a lonely holiday.png" alt="Videojuego A Lonely Holiday" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Videojuego A Lonely Holiday</div>
-                <div class="card-text">
-                    Mi segundo videojuego, donde nació el universo de BLOOODTITANS.
-                    <br><br>
-                    Página web donde publicaba mis juegos:
-                    <br>
-                    <a href="https://sites.google.com/view/el39-games/inicio"
-                       target="_blank"
-                       rel="noopener noreferrer">
-                        https://sites.google.com/view/el39-games/inicio
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <div class="content-card tall image-card" data-gallery="arte">
-            <img src="Imagenes/Primer diseño de 39.jpeg" alt="Primer diseño de El 39" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="card-description">
-                <div class="card-title">Primer diseño de El 39</div>
-                <div class="card-text">
-                    Primer diseño de El 39 para el videojuego A Lonely Holiday. Antes se llamaba Russ y aún no tenía su característica cabeza de conejo.
-                </div>
-            </div>
-        </div>
-
-    </div>
-</section>
-
-
-    
+            </div><!-- fin .content-row.featured anidado -->
+        </div><!-- fin .content-row.featured principal -->
     </section>
 
+    <!-- ========== SECCIÓN: MÁS CONTENIDO ========== -->
+    <section class="content-section">
+        <h2 class="section-title">Más Contenido</h2>
 
-    <script>
-        // Crear partículas
-        const particlesContainer = document.getElementById('particles');
-        for (let i = 0; i < 30; i++) {
-            const particle = document.createElement('div');
-            particle.className = 'particle';
-            particle.style.width = Math.random() * 5 + 2 + 'px';
-            particle.style.height = particle.style.width;
-            particle.style.left = Math.random() * 100 + '%';
-            particle.style.animationDuration = Math.random() * 10 + 10 + 's';
-            particle.style.animationDelay = Math.random() * 5 + 's';
-            particlesContainer.appendChild(particle);
-        }
+        <div class="content-row">
 
-        // Array de GIFs de memes
-        const memeGifs = [
-            'https://media.giphy.com/media/3o7btPCcdNniyf0ArS/giphy.gif',
-            'https://media.giphy.com/media/l3q2K5jinAlChoCLS/giphy.gif',
-            'https://media.giphy.com/media/QBd2kLB5qDmysEXre9/giphy.gif',
-            'https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif',
-            'https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExMXoyOG8zYzZ6c3RqMnc3cnEwYWhqMDB3a2JyNm82ZmN6YTBxc3d3biZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/C840F45mSTyyhSiH8w/giphy.gif',
-            'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3M2Rwc3Blb3EwNGptNHhyaTJvcHg0NGdmOXNpcTN6c2RkYWlvb3U5ZCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/XjleBVaSwAo11ERAxn/giphy.gif',
-            'https://media.giphy.com/media/3o7aCRloybJlXpNjSU/giphy.gif',
-            'https://media.giphy.com/media/xT0xeJpnrWC4XWblEk/giphy.gif',
-            'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3OWoyaHQ4Z2hidXlseW9zcDFodmoyM3JiZGt5ZmRibzZ6OGVienh2NCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xTiTnHvXHHxOTcdmxO/giphy.gif',
-            'https://media.giphy.com/media/Lopx9eUi34rbq/giphy.gif',
-            'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExcHRpZzNoOGE5dmV2NnR1NWN3MGRhdWQ4NXFqYmpjbTZsbjA4NWRhaSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/MOYUOOoIHOj9PKN1rE/giphy.gif',
-            'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3bjI5bnhrbTdtemlqcWVoeW0wYzl1Z2hhMmM2Z3gzeHJ4M2k1aGxibyZlcD12MV9naWZzX3RyZW5kaW5nJmN0PWc/ASd0Ukj0y3qMM/giphy.gif'
-        ];
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/WhatsApp Image 2026-01-02 at 7.37.04 PM.jpeg" alt="Recargo fan de Ross" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Recargo fan de personajes de Ross</div>
+                    <div class="card-text">Creación artística fan basada en los personajes de Ross.</div>
+                </div>
+            </div>
 
-        const getRandomMeme = () => memeGifs[Math.floor(Math.random() * memeGifs.length)];
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/Versiones humanas.jpeg" alt="Versiones humanas" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Diseños más favorables para el web comic</div>
+                    <div class="card-text">Para mí se me hace más cómodo y fácil de hacer, pero se necesita mucha paciencia para hacerlo bien.</div>
+                </div>
+            </div>
 
-        // Navbar scroll
-        const navbar = document.getElementById('navbar');
-        window.addEventListener('scroll', () => {
-            navbar.classList.toggle('scrolled', window.scrollY > 50);
-        });
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/Los primeros.jpg" alt="Primeros bocetos" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Primeros bocetos de BLOOODTITANS</div>
+                    <div class="card-text">Los primeros bocetos de los blooodtitans, incluyendo a El39 en sus primeros diseños, JL ahora como un lobo con boca rasgada, Crastaco y Unidad.</div>
+                </div>
+            </div>
 
-        // Sistema de galería mejorado
-        let currentGallery = [];
-        let currentGalleryData = [];
-        let currentIndex = 0;
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/blootitanes.jpg" alt="Penúltimo diseño" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Uno de los penúltimos diseños</div>
+                    <div class="card-text">Uno de los últimos diseños de 39, JL, Crastaco y Unidad (no es Tron, es otro personaje).</div>
+                </div>
+            </div>
 
-        const imageModal = document.getElementById('imageModal');
-        const modalImage = document.getElementById('modalImage');
-        const modalTitle = document.getElementById('modalTitle');
-        const modalText = document.getElementById('modalText');
-        const memeGif = document.getElementById('memeGif');
-        const closeModal = document.getElementById('closeModal');
-        const prevBtn = document.getElementById('prevBtn');
-        const nextBtn = document.getElementById('nextBtn');
-        const galleryCounter = document.getElementById('galleryCounter');
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/artemio.jpeg" alt="Primer dibujo de Spencer" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Primer dibujo de Spencer</div>
+                    <div class="card-text">Spencer es la peor persona jamás creada. Muere a manos de Hildreth y su identidad es tomada por El 39 al llegar a la Tierra.</div>
+                </div>
+            </div>
 
-        function updateGalleryCounter() {
-            galleryCounter.textContent = `${currentIndex + 1} / ${currentGallery.length}`;
-        }
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/Crastaco primer diseño .jpeg" alt="Primer diseño de Crastaco" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Primer diseño de Crastaco</div>
+                    <div class="card-text">Inspirado en reptiles. Un monstruo general de un solo ojo y color morado, símbolo de misterio, poder, ambición y lo sobrenatural.</div>
+                </div>
+            </div>
 
-        function showImage(index) {
-            if (currentGallery.length === 0) return;
-            
-            currentIndex = (index + currentGallery.length) % currentGallery.length;
-            modalImage.src = currentGallery[currentIndex];
-            
-            // Mostrar descripción
-            if (currentGalleryData[currentIndex]) {
-                modalTitle.textContent = currentGalleryData[currentIndex].title;
-                modalText.textContent = currentGalleryData[currentIndex].text;
-            }
-            
-            updateGalleryCounter();
-        }
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/Segundo diseño de Crastaco.jpeg" alt="Segundo diseño de Crastaco" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Segundo diseño de Crastaco</div>
+                    <div class="card-text">Aquí comienza a tomar forma la armadura de Crastaco.</div>
+                </div>
+            </div>
 
-        prevBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            showImage(currentIndex - 1);
-        });
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/JL y crastaco segundo diseño.jpeg" alt="Crastaco y JL" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Tercer diseño de Crastaco y primer diseño de JL</div>
+                    <div class="card-text">Crastaco ya posee su característico gran ojo. A su lado, el primer diseño de JL de espaldas.</div>
+                </div>
+            </div>
 
-        nextBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            showImage(currentIndex + 1);
-        });
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/Primer diseño de JL.jpeg" alt="Primer diseño de JL" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Primer diseño de JL</div>
+                    <div class="card-text">JL comenzó como un oso silencioso con lentes de sol, creado para un videojuego que desarrollé para un amigo.</div>
+                </div>
+            </div>
 
-        // Abrir capítulo piloto
-        document.getElementById('cap-piloto').addEventListener('click', (e) => {
-            window.open('pdfs/Cap_piloto.pdf', '_blank');
-        });
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/reross.jpeg" alt="Detalles del recargo fan" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Detalles del recargo fan</div>
+                    <div class="card-text">Detalles de la portada del cómic de Ross durante el proceso del recargo fan.</div>
+                </div>
+            </div>
 
-        // Manejar clicks en imágenes
-        document.querySelectorAll('.image-card').forEach(card => {
-            card.addEventListener('click', (e) => {
-                const img = card.querySelector('img');
-                if (img) {
-                    const gallery = card.getAttribute('data-gallery');
-                    
-                    // Obtener todas las imágenes y datos de la misma galería
-                    const galleryCards = document.querySelectorAll(`.image-card[data-gallery="${gallery}"]`);
-                    currentGallery = [];
-                    currentGalleryData = [];
-                    
-                    galleryCards.forEach(gc => {
-                        const imgEl = gc.querySelector('img');
-                        const desc = gc.querySelector('.card-description');
-                        if (imgEl && desc) {
-                            currentGallery.push(imgEl.src);
-                            currentGalleryData.push({
-                                title: desc.querySelector('.card-title').textContent,
-                                text: desc.querySelector('.card-text').textContent
-                            });
-                        }
-                    });
-                    
-                    // Encontrar el índice de la imagen clickeada
-                    currentIndex = currentGallery.indexOf(img.src);
-                    
-                    modalImage.src = img.src;
-                    modalTitle.textContent = currentGalleryData[currentIndex].title;
-                    modalText.textContent = currentGalleryData[currentIndex].text;
-                    memeGif.src = getRandomMeme();
-                    updateGalleryCounter();
-                    imageModal.classList.add('active');
-                    document.body.style.overflow = 'hidden';
-                }
-            });
-        });
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/videoboss.jpeg" alt="Primera aparición de Crastaco" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Primera aparición planeada de Crastaco</div>
+                    <div class="card-text">Crastaco estaba pensado como el jefe final del videojuego A Lonely Holiday en diciembre de 2020.</div>
+                </div>
+            </div>
 
-        closeModal.addEventListener('click', () => {
-            imageModal.classList.remove('active');
-            document.body.style.overflow = 'auto';
-        });
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/todo a mano.jpeg" alt="Trabajo hecho a mano" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Todo a mano</div>
+                    <div class="card-text">Todo el capítulo piloto fue realizado completamente a mano y guardado en carpetas físicas.</div>
+                </div>
+            </div>
 
-        imageModal.addEventListener('click', (e) => {
-            if (e.target === imageModal) {
-                imageModal.classList.remove('active');
-                document.body.style.overflow = 'auto';
-            }
-        });
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/calle.jpeg" alt="Dibujo de calle" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Dibujo de calle</div>
+                    <div class="card-text">Ilustración de un escenario del videojuego A Lonely Holiday.</div>
+                </div>
+            </div>
 
-        // Modal de video
-        const videoModal = document.getElementById('videoModal');
-        const modalVideo = document.getElementById('modalVideo');
-        const videoMemeGif = document.getElementById('videoMemeGif');
-        const closeVideoModal = document.getElementById('closeVideoModal');
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/39 colores.jpeg" alt="Colores de El 39" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">El 39 y su paleta de colores</div>
+                    <div class="card-text">Colores y texturas definitivas del personaje El 39.</div>
+                </div>
+            </div>
 
-        document.querySelectorAll('.video-card').forEach(card => {
-            const video = card.querySelector('video');
-            const overlay = card.querySelector('.video-overlay');
-            
-            card.addEventListener('mouseenter', () => video.play().catch(() => {}));
-            card.addEventListener('mouseleave', () => {
-                video.pause();
-                video.currentTime = 0;
-            });
-            
-            overlay.addEventListener('click', (e) => {
-                e.stopPropagation();
-                modalVideo.src = video.src;
-                modalVideo.load();
-                videoMemeGif.src = getRandomMeme();
-                videoModal.classList.add('active');
-                document.body.style.overflow = 'hidden';
-            });
-        });
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/a lonely holiday.png" alt="Videojuego A Lonely Holiday" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Videojuego A Lonely Holiday</div>
+                    <div class="card-text">
+                        Mi segundo videojuego, donde nació el universo de BLOOODTITANS.<br><br>
+                        Página web donde publicaba mis juegos:<br>
+                        <a href="https://sites.google.com/view/el39-games/inicio" target="_blank" rel="noopener noreferrer">
+                            https://sites.google.com/view/el39-games/inicio
+                        </a>
+                    </div>
+                </div>
+            </div>
 
-        closeVideoModal.addEventListener('click', () => {
-            videoModal.classList.remove('active');
-            modalVideo.pause();
-            document.body.style.overflow = 'auto';
-        });
+            <div class="content-card tall image-card" data-gallery="arte">
+                <img src="Imagenes/Primer diseño de 39.jpeg" alt="Primer diseño de El 39" style="width: 100%; height: 100%; object-fit: cover;">
+                <div class="card-description">
+                    <div class="card-title">Primer diseño de El 39</div>
+                    <div class="card-text">Primer diseño de El 39 para el videojuego A Lonely Holiday. Antes se llamaba Russ y aún no tenía su característica cabeza de conejo.</div>
+                </div>
+            </div>
 
-        videoModal.addEventListener('click', (e) => {
-            if (e.target === videoModal) {
-                videoModal.classList.remove('active');
-                modalVideo.pause();
-                document.body.style.overflow = 'auto';
-            }
-        });
+        </div>
+    </section>
 
-        // Cerrar con ESC
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                if (imageModal.classList.contains('active')) {
-                    imageModal.classList.remove('active');
-                    document.body.style.overflow = 'auto';
-                }
-                if (videoModal.classList.contains('active')) {
-                    videoModal.classList.remove('active');
-                    modalVideo.pause();
-                    document.body.style.overflow = 'auto';
-                }
-            }
-            // Navegación con flechas del teclado
-            if (imageModal.classList.contains('active')) {
-                if (e.key === 'ArrowLeft') {
-                    showImage(currentIndex - 1);
-                } else if (e.key === 'ArrowRight') {
-                    showImage(currentIndex + 1);
-                }
-            }
-        });
+    <!-- ✅ JS EXTERNO (siempre al final del body) -->
+    <script src="scripts.js"></script>
 
-        // Animación de entrada para las secciones
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -100px 0px'
-        };
-
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.style.animation = 'fadeInUp 0.8s ease forwards';
-                }
-            });
-        }, observerOptions);
-
-        document.querySelectorAll('.content-section').forEach(section => {
-            observer.observe(section);
-        });
-
-        // Inicializar sistema de likes al cargar la página
-        initLikes();
-    </script>
 </body>
 </html>
