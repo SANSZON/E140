@@ -35,32 +35,24 @@
         <div class="scroll-indicator"></div>
     </div>
 
-    <!-- Modal de video -->
-    <div class="video-modal" id="videoModal">
-        <button class="close-modal" id="closeVideoModal">✕ Cerrar</button>
-        <img class="meme-gif" id="videoMemeGif" src="" alt="Meme">
-        <div class="modal-content-wrapper">
-            <video class="modal-video" id="modalVideo" controls autoplay></video>
-        </div>
-    </div>
-
-    <!-- Modal de imagen -->
-    <div class="image-modal" id="imageModal">
-        <button class="close-modal" id="closeModal">✕ Cerrar</button>
-        <img class="meme-gif" id="memeGif" src="" alt="Meme">
-        <div class="modal-content-wrapper">
-            <img class="modal-image" id="modalImage" src="" alt="Imagen ampliada">
-            <div class="modal-description" id="modalDescription">
-                <div class="card-title" id="modalTitle"></div>
-                <div class="card-text" id="modalText"></div>
+    <!-- ========== NUEVA SECCIÓN: VIDEOJUEGOS ========== -->
+    <section class="content-section">
+        <h2 class="section-title">Videojuegos</h2>
+        <div class="content-row">
+            <!-- Tarjeta para Scaria v0.0.1 -->
+            <div class="content-card tall" id="scaria-game-card" style="cursor: pointer;" onclick="window.location.href='Viedeojuego.html';">
+                <img src="Imagenes/39.png" alt="Scaria v0.0.1" style="width: 100%; height: 100%; object-fit: cover;"> <!-- Reemplaza con la imagen de Scaria si tienes una -->
+                <div class="card-description">
+                    <div class="card-title">Scaria - Versión 0.0.1</div>
+                    <div class="card-text">
+                        ¡Haz clic para jugar la primera versión de Scaria! 
+                        Una aventura que nace de las ideas del universo BLOOODTITANS.
+                    </div>
+                </div>
             </div>
+            <!-- Podrías añadir más tarjetas de videojuegos aquí en el futuro -->
         </div>
-        <div class="gallery-controls">
-            <button class="gallery-btn" id="prevBtn">← Anterior</button>
-            <span class="gallery-counter" id="galleryCounter">1 / 1</span>
-            <button class="gallery-btn" id="nextBtn">Siguiente →</button>
-        </div>
-    </div>
+    </section>
 
     <!-- ========== SECCIÓN: COMICS Y CURIOSIDADES ========== -->
     <section class="content-section">
@@ -267,6 +259,33 @@
 
         </div>
     </section>
+
+    <!-- Modal de video -->
+    <div class="video-modal" id="videoModal">
+        <button class="close-modal" id="closeVideoModal">✕ Cerrar</button>
+        <img class="meme-gif" id="videoMemeGif" src="" alt="Meme">
+        <div class="modal-content-wrapper">
+            <video class="modal-video" id="modalVideo" controls autoplay></video>
+        </div>
+    </div>
+
+    <!-- Modal de imagen -->
+    <div class="image-modal" id="imageModal">
+        <button class="close-modal" id="closeModal">✕ Cerrar</button>
+        <img class="meme-gif" id="memeGif" src="" alt="Meme">
+        <div class="modal-content-wrapper">
+            <img class="modal-image" id="modalImage" src="" alt="Imagen ampliada">
+            <div class="modal-description" id="modalDescription">
+                <div class="card-title" id="modalTitle"></div>
+                <div class="card-text" id="modalText"></div>
+            </div>
+        </div>
+        <div class="gallery-controls">
+            <button class="gallery-btn" id="prevBtn">← Anterior</button>
+            <span class="gallery-counter" id="galleryCounter">1 / 1</span>
+            <button class="gallery-btn" id="nextBtn">Siguiente →</button>
+        </div>
+    </div>
 
     <!-- ✅ JS EXTERNO (siempre al final del body) -->
     <script src="scripts.js"></script>
