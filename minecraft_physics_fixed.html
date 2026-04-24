@@ -1114,9 +1114,6 @@ function findSafeSpawn(){
   return{x:0.5, y:SEA_LEVEL+5, z:0.5};
 }
 
-// ══════════════════════════════════════════════════════════════
-//  EXPONER GLOBALES
-// ══════════════════════════════════════════════════════════════
 window.getBlock=getBlock; window.setBlock=setBlock;
 window.hotbar=hotbar; window.inventory=inventory;
 window.addItem=addItem; window.removeItem=removeItem; window.hasItem=hasItem;
@@ -1134,7 +1131,7 @@ window.hotbarSel=hotbarSel;
   const pcx=Math.floor(sp.x/CHUNK_SIZE), pcz=Math.floor(sp.z/CHUNK_SIZE);
   precacheArea(pcx,pcz,4);
 
-  const s=document.createElement('script'); s.src='Player.js';
+  const s=document.createElement('script'); s.src='player.js';
   s.onload=()=>{ camera.position.set(sp.x,sp.y,sp.z); renderHotbar(); renderInv(); };
   s.onerror=()=>{ camera.position.set(sp.x,sp.y,sp.z); renderHotbar(); renderInv(); console.warn('player.js no encontrado'); };
   document.body.appendChild(s);
