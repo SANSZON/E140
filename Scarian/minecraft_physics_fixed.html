@@ -427,9 +427,9 @@ const hotbar=new Array(8).fill(null); let hotbarSel=0;
 //  BIOMAS
 // ══════════════════════════════════════════════════════════════
 const BIOME={
-  PLAINS:10,DESERT:0,TUNDRA:1,MOUNTAINS:-20,FOREST:4,
-  OCEAN:1,DEEP_OCEAN:1,SWAMP:10,SAVANNA:10,TAIGA:3,
-  DRY_TROPICAL:10,WET_TROPICAL:2,CLOUD_FOREST:2,MANGROVE:2,GRASSLAND:10,
+  PLAINS:10,DESERT:0,TUNDRA:10,MOUNTAINS:0,FOREST:10,
+  OCEAN:0,DEEP_OCEAN:0,SWAMP:1,SAVANNA:10,TAIGA:10,
+  DRY_TROPICAL:0,WET_TROPICAL:10,CLOUD_FOREST:0,MANGROVE:0,GRASSLAND:0,
 };
 const BIOME_NAMES=[
   'Llanuras','Desierto','Tundra','Montañas','Bosque','Océano','Mar Profundo','Pantano','Sabana','Taiga',
@@ -1067,7 +1067,7 @@ function updateFrustumCulling(){
 // ══════════════════════════════════════════════════════════════
 //  CARGA DE CHUNKS — cola priorizada con worker
 // ══════════════════════════════════════════════════════════════
-const RENDER_DIST_MIN=4, RENDER_DIST_MAX=16;
+const RENDER_DIST_MIN=6, RENDER_DIST_MAX=26;
 let RENDER_DIST=8;
 let lastCX=9999,lastCZ=9999;
 const chunkQueue=[];  // cola de chunks a solicitar al worker
