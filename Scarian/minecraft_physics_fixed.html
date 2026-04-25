@@ -690,7 +690,7 @@ let workerJobId = 0;
 const workerJobMap = new Map(); // id → {cx,cz}
 
 for(let i=0;i<NUM_WORKERS;i++){
-  const w = new Worker('chunkWorker.js');
+  const w = new Worker('chunkworker.js');
   w.postMessage({type:'init', seed:WORLD_SEED, seaLevel:SEA_LEVEL});
   w.onmessage = function(e){
     const{cx,cz,id,data}=e.data;
