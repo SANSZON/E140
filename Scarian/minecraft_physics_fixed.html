@@ -35,6 +35,7 @@ body{background:#000;overflow:hidden}
 #rdctl{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:11px;padding:5px 10px;border-radius:4px;display:flex;align-items:center;gap:6px;user-select:none}
 #rdctl button{background:rgba(255,255,255,0.12);border:1px solid #666;color:#fff;width:22px;height:22px;border-radius:3px;cursor:pointer;font-size:14px;line-height:1}
 #rdctl button:hover{background:rgba(255,255,255,0.28)}
+#loadbar{position:absolute;bottom:0;left:0;height:3px;background:#4af;width:0%;transition:width 0.2s;pointer-events:none;z-index:30}
 </style>
 </head>
 <body>
@@ -54,7 +55,7 @@ body{background:#000;overflow:hidden}
   </div>
   <div id="blocker"><div>SCARIAN<br>
     <span>Click para jugar · WASD mover · Espacio saltar · Shift correr<br>
-    Click izq romper · Click der colocar · E inventario · Scroll cambiar bloque<br><br></span>
+    Mantén Click izq romper · Click der colocar · E inventario · Scroll cambiar bloque<br><br></span>
   </div></div>
   <div id="seedinfo">Semilla: cargando...</div>
   <div id="rdctl">
@@ -62,6 +63,7 @@ body{background:#000;overflow:hidden}
     <span id="rdlbl">Chunks: 8</span>
     <button id="rdinc">+</button>
   </div>
+  <div id="loadbar"></div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -88,6 +90,7 @@ const invgrid      = document.getElementById('invgrid');
 const msgEl        = document.getElementById('msg');
 const waterOverlay = document.getElementById('wateroverlay');
 const snowOverlay  = document.getElementById('snowoverlay');
+const loadBar      = document.getElementById('loadbar');
 window.waterOverlay = waterOverlay;
 window.snowOverlay  = snowOverlay;
 const lavOverlay   = { style:{display:'none'} };
@@ -100,10 +103,9 @@ const renderer = new THREE.WebGLRenderer({canvas, antialias:false, powerPreferen
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.sortObjects = false;
 
-// ── Frustum para culling manual ──
-const _frustum      = new THREE.Frustum();
-const _frustumMat   = new THREE.Matrix4();
-const _chunkSphere  = new THREE.Sphere();
+const _frustum    = new THREE.Frustum();
+const _frustumMat = new THREE.Matrix4();
+const _chunkSphere= new THREE.Sphere();
 
 const scene  = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
@@ -121,7 +123,7 @@ function resize(){
 resize(); window.addEventListener('resize',resize);
 
 // ══════════════════════════════════════════════════════════════
-//  NOISE
+//  NOISE (usado solo para getBiome/getSurface en hilo principal)
 // ══════════════════════════════════════════════════════════════
 function hash2(x, z, seed) {
   let h = ((x * 1619 + z * 31337 + seed * 1013904223) | 0);
@@ -137,7 +139,6 @@ function hash3(x, y, z, seed) {
 }
 function smoothstep(t) { return t * t * (3 - 2 * t); }
 function lerp(a, b, t) { return a + (b - a) * t; }
-
 function grad2(h, x, z) {
   const v = h & 3;
   return v === 0 ? x + z : v === 1 ? -x + z : v === 2 ? x - z : -x - z;
@@ -250,15 +251,11 @@ const T={
     ctx.fillStyle='#888080';ctx.fillRect(0,0,16,16);
     for(let i=0;i<20;i++){const s=1+rnd(3);ctx.fillStyle=`hsl(0,0%,${40+rnd(30)}%)`;ctx.fillRect(rnd(14),rnd(14),s,s);}
   }),
-
-  // ── NUEVOS BIOMAS ──
-  // Tierra roja (bosque seco tropical)
   redDirt: makeTex(ctx=>{
     ctx.fillStyle='#b84a18';ctx.fillRect(0,0,16,16);
     ctx.fillStyle='#a03a10';for(let i=0;i<22;i++)ctx.fillRect(rnd(16),rnd(16),1+rnd(2),1);
     ctx.fillStyle='#cc5520';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
   }),
-  // Pasto seco (bosque seco)
   dryGrassTop: makeTex(ctx=>{
     ctx.fillStyle='#7a9e20';ctx.fillRect(0,0,16,16);
     ctx.fillStyle='#6a8818';for(let i=0;i<20;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
@@ -269,43 +266,34 @@ const T={
     ctx.fillStyle='#a03a10';for(let i=0;i<15;i++)ctx.fillRect(rnd(16),3+rnd(12),1,1);
     ctx.fillStyle='#7a9e20';ctx.fillRect(0,0,16,3);
   }),
-  // Hojas tropicales densas (bosque húmedo)
   tropLeaves: makeTex(ctx=>{
     ctx.fillStyle='#0e7a14';ctx.fillRect(0,0,16,16);
     ctx.fillStyle='#086010';for(let i=0;i<16;i++)ctx.fillRect(rnd(16),rnd(16),2,2);
     ctx.fillStyle='#18b020';for(let i=0;i<10;i++)ctx.fillRect(rnd(16),rnd(16),1,2);
-    // Flores amarillas ocasionales
     ctx.fillStyle='#eedd00';for(let i=0;i<3;i++)ctx.fillRect(rnd(14),rnd(14),2,2);
   }),
-  // Tronco tropical (más ancho)
   tropWood: makeTex(ctx=>{
     ctx.fillStyle='#4a3218';ctx.fillRect(0,0,16,16);
     for(let i=0;i<16;i++){ctx.fillStyle=i%2?'#3a2810':'#5a3a20';ctx.fillRect(0,i,16,1);}
     ctx.fillStyle='#6a4825';for(let i=0;i<4;i++)ctx.fillRect(rnd(14),rnd(14),2,5);
   }),
-  // Hojas de niebla (bosque nublado): verde azulado pálido
   cloudLeaves: makeTex(ctx=>{
     ctx.fillStyle='#3a8870';ctx.fillRect(0,0,16,16);
     ctx.fillStyle='#2a6858';for(let i=0;i<14;i++)ctx.fillRect(rnd(16),rnd(16),2,2);
     ctx.fillStyle='#4aaa88';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,2);
-    // Neblina blanca
     ctx.fillStyle='rgba(220,240,255,0.35)';ctx.fillRect(0,0,16,16);
   }),
-  // Tierra de manglar: muy oscura, húmeda
   mudDirt: makeTex(ctx=>{
     ctx.fillStyle='#3a2810';ctx.fillRect(0,0,16,16);
     ctx.fillStyle='#2a1808';for(let i=0;i<22;i++)ctx.fillRect(rnd(16),rnd(16),1+rnd(2),1);
     ctx.fillStyle='#4a3218';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
-    // Reflejos húmedos
     ctx.fillStyle='rgba(60,100,80,0.3)';for(let i=0;i<5;i++)ctx.fillRect(rnd(14),rnd(14),2,1);
   }),
-  // Hojas de manglar: verde oscuro
   mangroveLeaves: makeTex(ctx=>{
     ctx.fillStyle='#126628';ctx.fillRect(0,0,16,16);
     ctx.fillStyle='#0a4a1a';for(let i=0;i<14;i++)ctx.fillRect(rnd(16),rnd(16),2,2);
     ctx.fillStyle='#1c8836';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,2);
   }),
-  // Agua pantanosa: verde oscuro turbio
   swampWater: makeTex(ctx=>{
     for(let y=0;y<16;y++)for(let x=0;x<16;x++){
       const w=Math.sin(x*0.8+y*0.5)*0.5+0.5;
@@ -313,7 +301,6 @@ const T={
       ctx.fillRect(x,y,1,1);
     }
   }),
-  // Pastizal / pasto alto amarillento (sabana)
   savannaTop: makeTex(ctx=>{
     ctx.fillStyle='#a8b840';ctx.fillRect(0,0,16,16);
     ctx.fillStyle='#908a28';for(let i=0;i<20;i++)ctx.fillRect(rnd(16),rnd(16),1,2);
@@ -324,7 +311,6 @@ const T={
     ctx.fillStyle='#b05a30';for(let i=0;i<15;i++)ctx.fillRect(rnd(16),3+rnd(12),1,1);
     ctx.fillStyle='#a8b840';ctx.fillRect(0,0,16,3);
   }),
-  // Tronco de acacia (sabana)
   acaciaWood: makeTex(ctx=>{
     ctx.fillStyle='#b88040';ctx.fillRect(0,0,16,16);
     for(let i=0;i<16;i++){ctx.fillStyle=i%2?'#a06a30':'#c89050';ctx.fillRect(0,i,16,1);}
@@ -334,7 +320,6 @@ const T={
     ctx.strokeStyle='#b87040';ctx.lineWidth=1;
     for(let r=2;r<8;r+=2){ctx.beginPath();ctx.arc(8,8,r,0,Math.PI*2);ctx.stroke();}
   }),
-  // Hojas de acacia: verdes amarillentas y planas
   acaciaLeaves: makeTex(ctx=>{
     ctx.fillStyle='#6a9a18';ctx.fillRect(0,0,16,16);
     ctx.fillStyle='#508010';for(let i=0;i<14;i++)ctx.fillRect(rnd(16),rnd(16),2,2);
@@ -345,12 +330,11 @@ const T={
 // ══════════════════════════════════════════════════════════════
 //  BLOCK IDs
 // ══════════════════════════════════════════════════════════════
-const AIR=0, GRASS=1, DIRT=2, STONE=3, WOOD=4, LEAVES=5, SAND=6, SNOW=7, WATER=8,
-      SNOW_STONE=9, GRAVEL=10,
-      // Nuevos biomas
-      RED_DIRT=11, DRY_GRASS=12, TROP_WOOD=13, TROP_LEAVES=14,
-      CLOUD_LEAVES=15, MUD_DIRT=16, MANGROVE_LEAVES=17, SWAMP_WATER=18,
-      ACACIA_WOOD=19, SAVANNA_GRASS=20, ACACIA_LEAVES=21;
+const AIR=0,GRASS=1,DIRT=2,STONE=3,WOOD=4,LEAVES=5,SAND=6,SNOW=7,WATER=8,
+      SNOW_STONE=9,GRAVEL=10,
+      RED_DIRT=11,DRY_GRASS=12,TROP_WOOD=13,TROP_LEAVES=14,
+      CLOUD_LEAVES=15,MUD_DIRT=16,MANGROVE_LEAVES=17,SWAMP_WATER=18,
+      ACACIA_WOOD=19,SAVANNA_GRASS=20,ACACIA_LEAVES=21;
 
 const BLOCK_NAMES={
   [GRASS]:'Grass',[DIRT]:'Tierra',[STONE]:'Piedra',[WOOD]:'Madera',
@@ -373,7 +357,6 @@ const BLOCK_FACES={
   [WATER]:      [T.water,T.water,T.water,T.water,T.water,T.water],
   [SNOW_STONE]: [T.snowStone,T.snowStone,T.snowStone,T.snowStone,T.snowStone,T.snowStone],
   [GRAVEL]:     [T.gravel,T.gravel,T.gravel,T.gravel,T.gravel,T.gravel],
-  // Nuevos
   [RED_DIRT]:        [T.redDirt,T.redDirt,T.redDirt,T.redDirt,T.redDirt,T.redDirt],
   [DRY_GRASS]:       [T.dryGrassSide,T.dryGrassSide,T.dryGrassTop,T.redDirt,T.dryGrassSide,T.dryGrassSide],
   [TROP_WOOD]:       [T.tropWood,T.tropWood,T.woodTop,T.woodTop,T.tropWood,T.tropWood],
@@ -397,16 +380,15 @@ const BLOCK_ICON={
   [ACACIA_WOOD]:T.acaciaTop,[SAVANNA_GRASS]:T.savannaTop,[ACACIA_LEAVES]:T.acaciaLeaves,
 };
 
-// Transparentes = no opaco
 function isOpaque(b){
-  return b!==AIR && b!==WATER && b!==SWAMP_WATER &&
-         b!==LEAVES && b!==TROP_LEAVES && b!==CLOUD_LEAVES &&
-         b!==MANGROVE_LEAVES && b!==ACACIA_LEAVES && b!==SNOW;
+  return b!==AIR&&b!==WATER&&b!==SWAMP_WATER&&
+         b!==LEAVES&&b!==TROP_LEAVES&&b!==CLOUD_LEAVES&&
+         b!==MANGROVE_LEAVES&&b!==ACACIA_LEAVES&&b!==SNOW;
 }
 function isSolid(b){
-  return b!==AIR && b!==WATER && b!==SWAMP_WATER && b!==SNOW;
+  return b!==AIR&&b!==WATER&&b!==SWAMP_WATER&&b!==SNOW;
 }
-function isWaterLike(b){ return b===WATER || b===SWAMP_WATER; }
+function isWaterLike(b){ return b===WATER||b===SWAMP_WATER; }
 function isLeavesLike(b){
   return b===LEAVES||b===TROP_LEAVES||b===CLOUD_LEAVES||b===MANGROVE_LEAVES||b===ACACIA_LEAVES;
 }
@@ -415,7 +397,9 @@ window.isSolid=isSolid;
 window.SNOW_BLOCK=SNOW;
 window.AIR=AIR; window.WATER=WATER; window.SNOW=SNOW; window.GRASS=GRASS;
 window.DIRT=DIRT; window.STONE=STONE; window.WOOD=WOOD; window.LEAVES=LEAVES;
-window.SAND=SAND; window.SNOW_STONE=SNOW_STONE;
+window.SAND=SAND; window.SNOW_STONE=SNOW_STONE; window.GRAVEL=GRAVEL;
+window.RED_DIRT=RED_DIRT;
+window.BLOCK_ICON=BLOCK_ICON; window.BLOCK_NAMES=BLOCK_NAMES; window.BLOCK_FACES=BLOCK_FACES;
 
 const FACE_DIRS=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
 const FACE_VERTS=[
@@ -440,17 +424,12 @@ const hotbar=new Array(8).fill(null); let hotbarSel=0;
 {let hi=0;for(const[t]of inventory){if(hi<8){hotbar[hi]=t;hi++;}}}
 
 // ══════════════════════════════════════════════════════════════
-//  BIOMAS — ampliados con 5 nuevos biomas latinoamericanos
+//  BIOMAS
 // ══════════════════════════════════════════════════════════════
 const BIOME={
-  PLAINS:10, DESERT:1, TUNDRA:1, MOUNTAINS:0, FOREST:4,
-  OCEAN:5, DEEP_OCEAN:1, SWAMP:10, SAVANNA:8, TAIGA:3,
-  // Nuevos
-  DRY_TROPICAL:10,   // Bosque tropical seco
-  WET_TROPICAL:11,   // Bosque tropical húmedo
-  CLOUD_FOREST:12,   // Bosque nublado
-  MANGROVE:13,       // Manglar
-  GRASSLAND:14,      // Pastizal / sabana de gramíneas
+  PLAINS:10,DESERT:0,TUNDRA:1,MOUNTAINS:-20,FOREST:4,
+  OCEAN:1,DEEP_OCEAN:1,SWAMP:10,SAVANNA:10,TAIGA:3,
+  DRY_TROPICAL:10,WET_TROPICAL:2,CLOUD_FOREST:2,MANGROVE:2,GRASSLAND:10,
 };
 const BIOME_NAMES=[
   'Llanuras','Desierto','Tundra','Montañas','Bosque','Océano','Mar Profundo','Pantano','Sabana','Taiga',
@@ -458,39 +437,29 @@ const BIOME_NAMES=[
 ];
 
 const _biomeCache=new Map();
-function getBiome(wx, wz){
+function getBiome(wx,wz){
   const k=wx+'_'+wz; if(_biomeCache.has(k))return _biomeCache.get(k);
-  const temp  = fbm2(wx+1000, wz+1000, 3, 280, WORLD_SEED);
-  const humid = fbm2(wx+3000, wz+3000, 3, 300, WORLD_SEED+777);
-  const cont  = fbm2(wx+5000, wz+5000, 2, 500, WORLD_SEED+1234);
-  // Calor tropical (zonas ecuatoriales)
-  const tropical = fbm2(wx+7000, wz+7000, 2, 400, WORLD_SEED+2222);
-
+  const temp  = fbm2(wx+1000,wz+1000,3,280,WORLD_SEED);
+  const humid = fbm2(wx+3000,wz+3000,3,300,WORLD_SEED+777);
+  const cont  = fbm2(wx+5000,wz+5000,2,500,WORLD_SEED+1234);
+  const tropical = fbm2(wx+7000,wz+7000,2,400,WORLD_SEED+2222);
   let b;
-  if(cont < -0.38) b=BIOME.DEEP_OCEAN;
-  else if(cont < -0.14) b=BIOME.OCEAN;
-  // Manglar: costas tropicales húmedas
-  else if(cont < -0.04 && tropical > 0.2 && humid > 0.1) b=BIOME.MANGROVE;
-  else if(temp > 0.35 && humid < -0.12) b=BIOME.DESERT;
-  // Bosque tropical seco: caliente, moderadamente seco
-  else if(tropical > 0.28 && temp > 0.25 && humid > -0.2 && humid < 0.1) b=BIOME.DRY_TROPICAL;
-  // Selva húmeda: muy caliente, muy húmedo
-  else if(tropical > 0.22 && temp > 0.20 && humid > 0.22) b=BIOME.WET_TROPICAL;
-  // Bosque nublado: altitud media, húmedo
-  else if(temp > 0.05 && temp < 0.30 && humid > 0.28 && cont > 0.05) b=BIOME.CLOUD_FOREST;
-  else if(temp > 0.32 && humid >= -0.12) b=BIOME.SAVANNA;
-  // Pastizal: templado-cálido, húmedo moderado
-  else if(temp > 0.10 && temp < 0.32 && humid > 0.10 && humid < 0.28) b=BIOME.GRASSLAND;
-  else if(temp < -0.30 && humid > 0) b=BIOME.TUNDRA;
-  else if(temp < -0.12 && humid > 0.1) b=BIOME.TAIGA;
-  else if(humid > 0.32) b=BIOME.SWAMP;
-  else if(humid > 0.16) b=BIOME.FOREST;
-  else {
-    const elev = fbm2(wx+8000, wz+8000, 2, 180, WORLD_SEED+5555);
-    b = elev > 0.28 ? BIOME.MOUNTAINS : BIOME.PLAINS;
-  }
+  if(cont<-0.38)b=BIOME.DEEP_OCEAN;
+  else if(cont<-0.14)b=BIOME.OCEAN;
+  else if(cont<-0.04&&tropical>0.2&&humid>0.1)b=BIOME.MANGROVE;
+  else if(temp>0.35&&humid<-0.12)b=BIOME.DESERT;
+  else if(tropical>0.28&&temp>0.25&&humid>-0.2&&humid<0.1)b=BIOME.DRY_TROPICAL;
+  else if(tropical>0.22&&temp>0.20&&humid>0.22)b=BIOME.WET_TROPICAL;
+  else if(temp>0.05&&temp<0.30&&humid>0.28&&cont>0.05)b=BIOME.CLOUD_FOREST;
+  else if(temp>0.32&&humid>=-0.12)b=BIOME.SAVANNA;
+  else if(temp>0.10&&temp<0.32&&humid>0.10&&humid<0.28)b=BIOME.GRASSLAND;
+  else if(temp<-0.30&&humid>0)b=BIOME.TUNDRA;
+  else if(temp<-0.12&&humid>0.1)b=BIOME.TAIGA;
+  else if(humid>0.32)b=BIOME.SWAMP;
+  else if(humid>0.16)b=BIOME.FOREST;
+  else{const elev=fbm2(wx+8000,wz+8000,2,180,WORLD_SEED+5555);b=elev>0.28?BIOME.MOUNTAINS:BIOME.PLAINS;}
   _biomeCache.set(k,b);
-  if(_biomeCache.size > 80000) _biomeCache.clear();
+  if(_biomeCache.size>80000)_biomeCache.clear();
   return b;
 }
 
@@ -498,156 +467,115 @@ function getBiome(wx, wz){
 //  SUPERFICIE
 // ══════════════════════════════════════════════════════════════
 const _surfCache=new Map();
-function getSurface(wx, wz){
+function getSurface(wx,wz){
   const k=wx+'|'+wz; if(_surfCache.has(k))return _surfCache.get(k);
   const h=_calcSurface(wx,wz);
   _surfCache.set(k,h);
-  if(_surfCache.size > 120000) _surfCache.clear();
+  if(_surfCache.size>120000)_surfCache.clear();
   return h;
 }
-
-function _calcSurface(wx, wz){
-  const biome = getBiome(wx,wz);
-  const continental = fbm2(wx+200,  wz+200,  4, 600, WORLD_SEED+10) * 12;
-  const regional    = fbm2(wx+400,  wz+400,  5, 160, WORLD_SEED+20) * 10;
-  const local       = fbm2(wx+600,  wz+600,  4,  50, WORLD_SEED+30) *  5;
-  const detail      = fbm2(wx+800,  wz+800,  3,  18, WORLD_SEED+40) *  2;
-  const mountRaw    = ridgedFbm(wx+1200, wz+1200, 5, 200, WORLD_SEED+50);
-  const mountMask   = Math.max(0, fbm2(wx+2000, wz+2000, 3, 400, WORLD_SEED+60));
-  const mountains   = mountRaw * mountMask * 50;
-  const erosion     = Math.max(0, fbm2(wx+3000, wz+3000, 2, 300, WORLD_SEED+70));
-  const erosionFactor = lerp(1.0, 0.55, erosion * erosion);
-
+function _calcSurface(wx,wz){
+  const biome=getBiome(wx,wz);
+  const continental=fbm2(wx+200,wz+200,4,600,WORLD_SEED+10)*12;
+  const regional   =fbm2(wx+400,wz+400,5,160,WORLD_SEED+20)*10;
+  const local      =fbm2(wx+600,wz+600,4,50, WORLD_SEED+30)*5;
+  const detail     =fbm2(wx+800,wz+800,3,18, WORLD_SEED+40)*2;
+  const mountRaw   =ridgedFbm(wx+1200,wz+1200,5,200,WORLD_SEED+50);
+  const mountMask  =Math.max(0,fbm2(wx+2000,wz+2000,3,400,WORLD_SEED+60));
+  const mountains  =mountRaw*mountMask*50;
+  const erosion    =Math.max(0,fbm2(wx+3000,wz+3000,2,300,WORLD_SEED+70));
+  const erosionFactor=lerp(1.0,0.55,erosion*erosion);
   let base;
   switch(biome){
-    case BIOME.DEEP_OCEAN:    base = SEA_LEVEL-22+continental*0.08+local*0.4; break;
-    case BIOME.OCEAN:         base = SEA_LEVEL-6+continental*0.12+local*0.5; break;
-    case BIOME.MANGROVE:      base = SEA_LEVEL+1+continental*0.05+local*0.2; break;  // casi al nivel del mar
-    case BIOME.PLAINS:        base = SEA_LEVEL+5+continental*0.28+regional*0.22+local*0.5+detail; break;
-    case BIOME.DESERT:{
-      const dune = fbm2(wx+500,wz+500,3,40,WORLD_SEED+80)*6;
-      base = SEA_LEVEL+4+continental*0.30+regional*0.20+dune+detail; break;
-    }
-    case BIOME.DRY_TROPICAL:  base = SEA_LEVEL+7+continental*0.30+regional*0.25+local*0.6+detail; break;
-    case BIOME.WET_TROPICAL:  base = SEA_LEVEL+9+continental*0.32+regional*0.30+local*0.8+detail; break;
-    case BIOME.CLOUD_FOREST:  base = SEA_LEVEL+22+continental*0.40+regional*0.35+local*1.0+detail; break; // alturas
-    case BIOME.GRASSLAND:     base = SEA_LEVEL+6+continental*0.22+regional*0.20+local*0.5+detail; break;
-    case BIOME.SAVANNA:       base = SEA_LEVEL+6+continental*0.28+regional*0.24+local*0.6+detail; break;
-    case BIOME.SWAMP:         base = SEA_LEVEL-1+continental*0.08+local*0.3; break;
-    case BIOME.FOREST:        base = SEA_LEVEL+8+continental*0.35+regional*0.28+local*0.7+detail; break;
-    case BIOME.TAIGA:         base = SEA_LEVEL+10+continental*0.38+regional*0.30+local*0.8+detail; break;
-    case BIOME.TUNDRA:        base = SEA_LEVEL+6+continental*0.25+regional*0.18+local*0.5; break;
-    case BIOME.MOUNTAINS:     base = SEA_LEVEL+18+mountains*erosionFactor+continental*0.4+regional*0.35+local; break;
-    default:                  base = SEA_LEVEL+5+continental*0.28+regional*0.20+local*0.5;
+    case BIOME.DEEP_OCEAN:  base=SEA_LEVEL-22+continental*0.08+local*0.4;break;
+    case BIOME.OCEAN:       base=SEA_LEVEL-6+continental*0.12+local*0.5;break;
+    case BIOME.MANGROVE:    base=SEA_LEVEL+1+continental*0.05+local*0.2;break;
+    case BIOME.PLAINS:      base=SEA_LEVEL+5+continental*0.28+regional*0.22+local*0.5+detail;break;
+    case BIOME.DESERT:      {const dune=fbm2(wx+500,wz+500,3,40,WORLD_SEED+80)*6;base=SEA_LEVEL+4+continental*0.30+regional*0.20+dune+detail;break;}
+    case BIOME.DRY_TROPICAL:base=SEA_LEVEL+7+continental*0.30+regional*0.25+local*0.6+detail;break;
+    case BIOME.WET_TROPICAL:base=SEA_LEVEL+9+continental*0.32+regional*0.30+local*0.8+detail;break;
+    case BIOME.CLOUD_FOREST:base=SEA_LEVEL+22+continental*0.40+regional*0.35+local*1.0+detail;break;
+    case BIOME.GRASSLAND:   base=SEA_LEVEL+6+continental*0.22+regional*0.20+local*0.5+detail;break;
+    case BIOME.SAVANNA:     base=SEA_LEVEL+6+continental*0.28+regional*0.24+local*0.6+detail;break;
+    case BIOME.SWAMP:       base=SEA_LEVEL-1+continental*0.08+local*0.3;break;
+    case BIOME.FOREST:      base=SEA_LEVEL+8+continental*0.35+regional*0.28+local*0.7+detail;break;
+    case BIOME.TAIGA:       base=SEA_LEVEL+10+continental*0.38+regional*0.30+local*0.8+detail;break;
+    case BIOME.TUNDRA:      base=SEA_LEVEL+6+continental*0.25+regional*0.18+local*0.5;break;
+    case BIOME.MOUNTAINS:   base=SEA_LEVEL+18+mountains*erosionFactor+continental*0.4+regional*0.35+local;break;
+    default:                base=SEA_LEVEL+5+continental*0.28+regional*0.20+local*0.5;
   }
-  return Math.round(Math.max(4, Math.min(CHUNK_HEIGHT-4, base)));
+  return Math.round(Math.max(4,Math.min(CHUNK_HEIGHT-4,base)));
 }
-
-function surfaceBlock(biome, surfH){
+function surfaceBlock(biome,surfH){
   switch(biome){
-    case BIOME.DESERT:
-    case BIOME.OCEAN:
-    case BIOME.DEEP_OCEAN:    return SAND;
-    case BIOME.TUNDRA:
-    case BIOME.TAIGA:         return SNOW;
-    case BIOME.MANGROVE:      return MUD_DIRT;
-    case BIOME.DRY_TROPICAL:  return DRY_GRASS;
-    case BIOME.WET_TROPICAL:  return GRASS;  // pasto muy verde
-    case BIOME.CLOUD_FOREST:  return GRASS;
-    case BIOME.GRASSLAND:
-    case BIOME.SAVANNA:       return SAVANNA_GRASS;
+    case BIOME.DESERT:case BIOME.OCEAN:case BIOME.DEEP_OCEAN:return SAND;
+    case BIOME.TUNDRA:case BIOME.TAIGA:return SNOW;
+    case BIOME.MANGROVE:return MUD_DIRT;
+    case BIOME.DRY_TROPICAL:return DRY_GRASS;
+    case BIOME.WET_TROPICAL:return GRASS;
+    case BIOME.CLOUD_FOREST:return GRASS;
+    case BIOME.GRASSLAND:case BIOME.SAVANNA:return SAVANNA_GRASS;
     case BIOME.MOUNTAINS:
-      if(surfH > SEA_LEVEL+55) return SNOW;
-      if(surfH > SEA_LEVEL+30) return SNOW_STONE;
+      if(surfH>SEA_LEVEL+55)return SNOW;
+      if(surfH>SEA_LEVEL+30)return SNOW_STONE;
       return GRASS;
-    default: return GRASS;
+    default:return GRASS;
   }
 }
-
-function subBlock(biome, surfH, depth){
+function subBlock(biome,surfH,depth){
   switch(biome){
-    case BIOME.DESERT:
-    case BIOME.OCEAN:
-    case BIOME.DEEP_OCEAN:
-      return depth<=5 ? SAND : STONE;
-    case BIOME.TUNDRA:
-    case BIOME.TAIGA:
-      return depth<=1 ? DIRT : STONE;
-    case BIOME.MANGROVE:
-    case BIOME.WET_TROPICAL:
-      return depth<=4 ? MUD_DIRT : STONE;
-    case BIOME.DRY_TROPICAL:
-    case BIOME.SAVANNA:
-    case BIOME.GRASSLAND:
-      return depth<=3 ? RED_DIRT : STONE;
-    case BIOME.CLOUD_FOREST:
-      return depth<=3 ? DIRT : STONE;
+    case BIOME.DESERT:case BIOME.OCEAN:case BIOME.DEEP_OCEAN:return depth<=5?SAND:STONE;
+    case BIOME.TUNDRA:case BIOME.TAIGA:return depth<=1?DIRT:STONE;
+    case BIOME.MANGROVE:case BIOME.WET_TROPICAL:return depth<=4?MUD_DIRT:STONE;
+    case BIOME.DRY_TROPICAL:case BIOME.SAVANNA:case BIOME.GRASSLAND:return depth<=3?RED_DIRT:STONE;
+    case BIOME.CLOUD_FOREST:return depth<=3?DIRT:STONE;
     default:
-      if(depth<=3) return DIRT;
-      if(depth===4 && (hash2(surfH,biome,WORLD_SEED+90)%6===0)) return GRAVEL;
+      if(depth<=3)return DIRT;
+      if(depth===4&&(hash2(surfH,biome,WORLD_SEED+90)%6===0))return GRAVEL;
       return STONE;
   }
 }
 
 // ══════════════════════════════════════════════════════════════
-//  ÁRBOLES — extendidos para nuevos biomas
+//  ÁRBOLES
 // ══════════════════════════════════════════════════════════════
 const _treeCache=new Map();
-const TREE_TYPES={NORMAL:0,TALL:1,SUPER_TALL:2,DOUBLE:3,TRIPLE:4,QUAD:5,ACACIA:6,TROPICAL:7,CLOUD:8,MANGROVE_TREE:9};
-
-function getTreeInfo(wx, wz){
-  const k=wx+'_'+wz; if(_treeCache.has(k)) return _treeCache.get(k);
-  const info=_calcTreeInfo(wx,wz);
-  _treeCache.set(k,info);
-  if(_treeCache.size>80000) _treeCache.clear();
+function getTreeInfo(wx,wz){
+  const k=wx+'_'+wz;if(_treeCache.has(k))return _treeCache.get(k);
+  const info=_calcTreeInfo(wx,wz);_treeCache.set(k,info);
+  if(_treeCache.size>80000)_treeCache.clear();
   return info;
 }
-
-function _calcTreeInfo(wx, wz){
+function _calcTreeInfo(wx,wz){
   const biome=getBiome(wx,wz);
-  // Probabilidades por bioma
-  const prob =
-    biome===BIOME.FOREST      ? 0.032 :
-    biome===BIOME.PLAINS      ? 0.008 :
-    biome===BIOME.TAIGA       ? 0.025 :
-    biome===BIOME.SWAMP       ? 0.014 :
-    biome===BIOME.DRY_TROPICAL? 0.018 :
-    biome===BIOME.WET_TROPICAL? 0.045 :  // selva densa
-    biome===BIOME.CLOUD_FOREST? 0.028 :
-    biome===BIOME.MANGROVE    ? 0.022 :
-    biome===BIOME.GRASSLAND   ? 0.005 :
-    biome===BIOME.SAVANNA     ? 0.010 : 0;
-  if(!prob) return null;
-
+  const prob=
+    biome===BIOME.FOREST?0.032:biome===BIOME.PLAINS?0.008:biome===BIOME.TAIGA?0.025:
+    biome===BIOME.SWAMP?0.014:biome===BIOME.DRY_TROPICAL?0.018:biome===BIOME.WET_TROPICAL?0.045:
+    biome===BIOME.CLOUD_FOREST?0.028:biome===BIOME.MANGROVE?0.022:
+    biome===BIOME.GRASSLAND?0.005:biome===BIOME.SAVANNA?0.010:0;
+  if(!prob)return null;
   const surfH=getSurface(wx,wz);
-  if(surfH<=SEA_LEVEL+1) return null;
+  if(surfH<=SEA_LEVEL+1)return null;
   const topBlock=surfaceBlock(biome,surfH);
-  if(topBlock!==GRASS&&topBlock!==DIRT&&topBlock!==DRY_GRASS&&topBlock!==MUD_DIRT&&topBlock!==SAVANNA_GRASS) return null;
-
+  if(topBlock!==GRASS&&topBlock!==DIRT&&topBlock!==DRY_GRASS&&topBlock!==MUD_DIRT&&topBlock!==SAVANNA_GRASS)return null;
   const h=hash2(wx,wz,WORLD_SEED+42);
   const r=(h&0xFFFF)/0xFFFF;
-  if(r>prob) return null;
-
-  // Exclusión por vecinos
+  if(r>prob)return null;
   const exclusionR=6;
   for(let dx=-exclusionR;dx<=exclusionR;dx++){
     for(let dz=-exclusionR;dz<=exclusionR;dz++){
-      if(dx===0&&dz===0) continue;
-      if(dx*dx+dz*dz>exclusionR*exclusionR) continue;
-      const nx=wx+dx,nz=wz+dz;
-      const nb=getBiome(nx,nz);
-      const np=
-        nb===BIOME.FOREST?0.032:nb===BIOME.PLAINS?0.008:nb===BIOME.TAIGA?0.025:
+      if(dx===0&&dz===0)continue;
+      if(dx*dx+dz*dz>exclusionR*exclusionR)continue;
+      const nx=wx+dx,nz=wz+dz,nb=getBiome(nx,nz);
+      const np=nb===BIOME.FOREST?0.032:nb===BIOME.PLAINS?0.008:nb===BIOME.TAIGA?0.025:
         nb===BIOME.SWAMP?0.014:nb===BIOME.DRY_TROPICAL?0.018:nb===BIOME.WET_TROPICAL?0.045:
         nb===BIOME.CLOUD_FOREST?0.028:nb===BIOME.MANGROVE?0.022:
         nb===BIOME.GRASSLAND?0.005:nb===BIOME.SAVANNA?0.010:0;
-      if(!np) continue;
-      const nh=hash2(nx,nz,WORLD_SEED+42);
-      const nr=(nh&0xFFFF)/0xFFFF;
-      if(nr<=np&&(nx<wx||(nx===wx&&nz<wz))) return null;
+      if(!np)continue;
+      const nh=hash2(nx,nz,WORLD_SEED+42),nr=(nh&0xFFFF)/0xFFFF;
+      if(nr<=np&&(nx<wx||(nx===wx&&nz<wz)))return null;
     }
   }
-
   const hv=(h>>16)&0xFF;
   const isPine=biome===BIOME.TAIGA;
   const isTropical=biome===BIOME.WET_TROPICAL;
@@ -655,142 +583,87 @@ function _calcTreeInfo(wx, wz){
   const isMangrove=biome===BIOME.MANGROVE;
   const isDry=biome===BIOME.DRY_TROPICAL;
   const isSavannaGrass=biome===BIOME.SAVANNA||biome===BIOME.GRASSLAND;
-
-  let treeType, trunkH, leafRad, trunkOffsets=[[0,0]];
-
-  if(isPine){
-    treeType=TREE_TYPES.NORMAL; trunkH=7+(hv%5); leafRad=2;
-  } else if(isMangrove){
-    treeType=TREE_TYPES.MANGROVE_TREE; trunkH=4+(hv%3); leafRad=3;
-    // Raíces: tronco doble o triple
-    trunkOffsets=hv<128?[[0,0],[1,0]]:[[0,0],[1,0],[0,1]];
-  } else if(isTropical){
-    treeType=TREE_TYPES.TROPICAL;
-    if(hv<80)      { trunkH=10+(hv%5); leafRad=4; }
-    else if(hv<160){ trunkH=13+(hv%5); leafRad=5; trunkOffsets=[[0,0],[1,0]]; }
-    else           { trunkH=16+(hv%6); leafRad=5; trunkOffsets=[[0,0],[1,0],[0,1],[1,1]]; }
-  } else if(isCloud){
-    treeType=TREE_TYPES.CLOUD; trunkH=8+(hv%4); leafRad=4;
-    if(hv<128) trunkOffsets=[[0,0],[1,0]];
-  } else if(isDry){
-    treeType=TREE_TYPES.NORMAL; trunkH=4+(hv%4); leafRad=2;
-  } else if(isSavannaGrass){
-    treeType=TREE_TYPES.ACACIA; trunkH=4+(hv%3); leafRad=4;
-    // La acacia se bifurca visualmente con offsets
-    trunkOffsets=[[0,0]];
-  } else {
-    // Árboles normales del bosque
-    if(hv<100)       { treeType=TREE_TYPES.NORMAL;     trunkH=4+(hv%3); leafRad=2; }
-    else if(hv<160)  { treeType=TREE_TYPES.TALL;       trunkH=7+(hv%4); leafRad=3; }
-    else if(hv<195)  { treeType=TREE_TYPES.SUPER_TALL; trunkH=11+(hv%5);leafRad=4; }
-    else if(hv<220)  { treeType=TREE_TYPES.DOUBLE;     trunkH=5+(hv%3); leafRad=3; trunkOffsets=[[0,0],[1,0]]; }
-    else if(hv<240)  { treeType=TREE_TYPES.TRIPLE;     trunkH=6+(hv%3); leafRad=3; trunkOffsets=[[0,0],[1,0],[0,1]]; }
-    else             { treeType=TREE_TYPES.QUAD;        trunkH=6+(hv%3); leafRad=3; trunkOffsets=[[0,0],[1,0],[0,1],[1,1]]; }
+  let treeType,trunkH,leafRad,trunkOffsets=[[0,0]];
+  if(isPine){treeType='NORMAL';trunkH=7+(hv%5);leafRad=2;}
+  else if(isMangrove){treeType='MANGROVE_TREE';trunkH=4+(hv%3);leafRad=3;trunkOffsets=hv<128?[[0,0],[1,0]]:[[0,0],[1,0],[0,1]];}
+  else if(isTropical){
+    treeType='TROPICAL';
+    if(hv<80){trunkH=10+(hv%5);leafRad=4;}
+    else if(hv<160){trunkH=13+(hv%5);leafRad=5;trunkOffsets=[[0,0],[1,0]];}
+    else{trunkH=16+(hv%6);leafRad=5;trunkOffsets=[[0,0],[1,0],[0,1],[1,1]];}
+  }else if(isCloud){treeType='CLOUD';trunkH=8+(hv%4);leafRad=4;if(hv<128)trunkOffsets=[[0,0],[1,0]];}
+  else if(isDry){treeType='NORMAL';trunkH=4+(hv%4);leafRad=2;}
+  else if(isSavannaGrass){treeType='ACACIA';trunkH=4+(hv%3);leafRad=4;}
+  else{
+    if(hv<100){treeType='NORMAL';trunkH=4+(hv%3);leafRad=2;}
+    else if(hv<160){treeType='TALL';trunkH=7+(hv%4);leafRad=3;}
+    else if(hv<195){treeType='SUPER_TALL';trunkH=11+(hv%5);leafRad=4;}
+    else if(hv<220){treeType='DOUBLE';trunkH=5+(hv%3);leafRad=3;trunkOffsets=[[0,0],[1,0]];}
+    else if(hv<240){treeType='TRIPLE';trunkH=6+(hv%3);leafRad=3;trunkOffsets=[[0,0],[1,0],[0,1]];}
+    else{treeType='QUAD';trunkH=6+(hv%3);leafRad=3;trunkOffsets=[[0,0],[1,0],[0,1],[1,1]];}
   }
-
   return{surfH,trunkH,leafRad,isPine,treeType,trunkOffsets,biome};
 }
-
-// Qué madera usa cada tipo
-function treeTrunkBlock(treeType, biome){
-  if(biome===BIOME.WET_TROPICAL||biome===BIOME.DRY_TROPICAL) return TROP_WOOD;
-  if(biome===BIOME.MANGROVE) return TROP_WOOD;
-  if(biome===BIOME.SAVANNA||biome===BIOME.GRASSLAND) return ACACIA_WOOD;
+function treeTrunkBlock(treeType,biome){
+  if(biome===BIOME.WET_TROPICAL||biome===BIOME.DRY_TROPICAL||biome===BIOME.MANGROVE)return TROP_WOOD;
+  if(biome===BIOME.SAVANNA||biome===BIOME.GRASSLAND)return ACACIA_WOOD;
   return WOOD;
 }
-function treeLeavesBlock(treeType, biome){
-  if(biome===BIOME.WET_TROPICAL||biome===BIOME.DRY_TROPICAL) return TROP_LEAVES;
-  if(biome===BIOME.CLOUD_FOREST) return CLOUD_LEAVES;
-  if(biome===BIOME.MANGROVE) return MANGROVE_LEAVES;
-  if(biome===BIOME.SAVANNA||biome===BIOME.GRASSLAND) return ACACIA_LEAVES;
+function treeLeavesBlock(treeType,biome){
+  if(biome===BIOME.WET_TROPICAL||biome===BIOME.DRY_TROPICAL)return TROP_LEAVES;
+  if(biome===BIOME.CLOUD_FOREST)return CLOUD_LEAVES;
+  if(biome===BIOME.MANGROVE)return MANGROVE_LEAVES;
+  if(biome===BIOME.SAVANNA||biome===BIOME.GRASSLAND)return ACACIA_LEAVES;
   return LEAVES;
 }
-
-function treeBlockAt(wx, worldY, wz){
+function treeBlockAt(wx,worldY,wz){
   const SEARCH=6;
   for(let dx=-SEARCH;dx<=SEARCH;dx++){
     for(let dz=-SEARCH;dz<=SEARCH;dz++){
-      const rx=wx+dx, rz=wz+dz;
-      const info=getTreeInfo(rx,rz);
-      if(!info) continue;
+      const rx=wx+dx,rz=wz+dz,info=getTreeInfo(rx,rz);
+      if(!info)continue;
       const{surfH,trunkH,leafRad,isPine,treeType,trunkOffsets,biome}=info;
-      const base=surfH, trunkTop=base+trunkH;
-      const TRUNK_B=treeTrunkBlock(treeType,biome);
-      const LEAF_B=treeLeavesBlock(treeType,biome);
-
-      // Troncos
-      for(const[ox,oz] of trunkOffsets){
-        if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop) return TRUNK_B;
-      }
-
-      // Copa según tipo
-      if(treeType===TREE_TYPES.ACACIA){
-        // Acacia: copa plana y extendida, solo 2 capas
-        const copaStart=trunkTop;
-        const copaTop=trunkTop+2;
-        const relY=worldY-copaStart;
-        if(relY<0||relY>2) continue;
+      const base=surfH,trunkTop=base+trunkH;
+      const TRUNK_B=treeTrunkBlock(treeType,biome),LEAF_B=treeLeavesBlock(treeType,biome);
+      for(const[ox,oz] of trunkOffsets){if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop)return TRUNK_B;}
+      if(treeType==='ACACIA'){
+        const relY=worldY-trunkTop;if(relY<0||relY>2)continue;
         const rad=relY===0?leafRad:Math.max(1,leafRad-2);
-        const r2=dx*dx+dz*dz;
-        if(r2<=rad*rad+0.7){
-          let onTrunk=false;
-          for(const[ox,oz] of trunkOffsets){if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop){onTrunk=true;break;}}
-          if(!onTrunk) return LEAF_B;
+        if(dx*dx+dz*dz<=rad*rad+0.7){
+          let onT=false;for(const[ox,oz] of trunkOffsets)if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop){onT=true;break;}
+          if(!onT)return LEAF_B;
         }
-      } else if(isPine){
-        const copaStart=base+Math.floor(trunkH*0.45);
-        const copaTop=trunkTop+1;
-        const relY=worldY-copaStart;
-        if(relY<0||relY>copaTop-copaStart) continue;
-        const totalLayers=copaTop-copaStart;
-        const rad=Math.max(0,leafRad-Math.floor(relY*(leafRad/Math.max(1,totalLayers))));
-        const r2=dx*dx+dz*dz;
-        if(r2<=rad*rad+0.7){
-          let onTrunk=false;
-          for(const[ox,oz] of trunkOffsets){if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop){onTrunk=true;break;}}
-          if(!onTrunk) return LEAF_B;
+      }else if(isPine){
+        const cs=base+Math.floor(trunkH*0.45),ct=trunkTop+1,relY=worldY-cs;
+        if(relY<0||relY>ct-cs)continue;
+        const rad=Math.max(0,leafRad-Math.floor(relY*(leafRad/Math.max(1,ct-cs))));
+        if(dx*dx+dz*dz<=rad*rad+0.7){
+          let onT=false;for(const[ox,oz] of trunkOffsets)if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop){onT=true;break;}
+          if(!onT)return LEAF_B;
         }
-      } else if(treeType===TREE_TYPES.MANGROVE_TREE){
-        // Manglar: copa densa, esférica y baja
-        const copaStart=trunkTop-1;
-        const copaTop=trunkTop+2;
-        const relY=worldY-copaStart;
-        if(relY<0||relY>copaTop-copaStart) continue;
-        let cx=0,cz=0;
-        for(const[ox,oz] of trunkOffsets){cx+=ox;cz+=oz;}
-        cx/=trunkOffsets.length; cz/=trunkOffsets.length;
-        const cdx=dx-cx,cdz=dz-cz;
-        const r2=cdx*cdx+cdz*cdz;
-        const norm=(relY)/(copaTop-copaStart);
-        const rad=norm<0.5?leafRad:Math.max(1,leafRad-1);
+      }else if(treeType==='MANGROVE_TREE'){
+        const cs=trunkTop-1,ct=trunkTop+2,relY=worldY-cs;
+        if(relY<0||relY>ct-cs)continue;
+        let cx=0,cz=0;for(const[ox,oz] of trunkOffsets){cx+=ox;cz+=oz;}cx/=trunkOffsets.length;cz/=trunkOffsets.length;
+        const cdx=dx-cx,cdz=dz-cz,r2=cdx*cdx+cdz*cdz;
+        const rad=relY/(ct-cs)<0.5?leafRad:Math.max(1,leafRad-1);
         if(r2<=rad*rad+0.7){
-          let onTrunk=false;
-          for(const[ox,oz] of trunkOffsets){if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop){onTrunk=true;break;}}
-          if(!onTrunk) return LEAF_B;
+          let onT=false;for(const[ox,oz] of trunkOffsets)if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop){onT=true;break;}
+          if(!onT)return LEAF_B;
         }
-      } else {
-        // Árboles normales/tropical/nublado
-        const copaOffset=(treeType===TREE_TYPES.SUPER_TALL||treeType===TREE_TYPES.TALL||treeType===TREE_TYPES.TROPICAL||treeType===TREE_TYPES.CLOUD)?2:1;
-        const copaStart=trunkTop-copaOffset;
-        const copaTop=trunkTop+2;
-        const relY=worldY-copaStart;
-        if(relY<0||relY>copaTop-copaStart) continue;
-        const totalH=copaTop-copaStart;
-        const norm=relY/Math.max(1,totalH);
+      }else{
+        const co=(treeType==='SUPER_TALL'||treeType==='TALL'||treeType==='TROPICAL'||treeType==='CLOUD')?2:1;
+        const cs=trunkTop-co,ct=trunkTop+2,relY=worldY-cs;
+        if(relY<0||relY>ct-cs)continue;
+        const norm=relY/Math.max(1,ct-cs);
         let rad;
-        if(norm<0.25)       rad=leafRad;
-        else if(norm<0.55)  rad=leafRad;
-        else if(norm<0.80)  rad=Math.max(1,leafRad-1);
-        else                rad=1;
-        let cx=0,cz=0;
-        for(const[ox,oz] of trunkOffsets){cx+=ox;cz+=oz;}
-        cx/=trunkOffsets.length; cz/=trunkOffsets.length;
-        const cdx=dx-cx,cdz=dz-cz;
-        const r2=cdx*cdx+cdz*cdz;
+        if(norm<0.25)rad=leafRad;else if(norm<0.55)rad=leafRad;
+        else if(norm<0.80)rad=Math.max(1,leafRad-1);else rad=1;
+        let cx=0,cz=0;for(const[ox,oz] of trunkOffsets){cx+=ox;cz+=oz;}cx/=trunkOffsets.length;cz/=trunkOffsets.length;
+        const cdx=dx-cx,cdz=dz-cz,r2=cdx*cdx+cdz*cdz;
         if(r2<=rad*rad+0.6){
-          let onTrunk=false;
-          for(const[ox,oz] of trunkOffsets){if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop){onTrunk=true;break;}}
-          if(!onTrunk) return LEAF_B;
+          let onT=false;for(const[ox,oz] of trunkOffsets)if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop){onT=true;break;}
+          if(!onT)return LEAF_B;
         }
       }
     }
@@ -799,150 +672,207 @@ function treeBlockAt(wx, worldY, wz){
 }
 
 // ══════════════════════════════════════════════════════════════
-//  GENERACIÓN DE CHUNKS
+//  WORLD DATA — cache en memoria con generación en worker
 // ══════════════════════════════════════════════════════════════
-const worldData  = new Map();
-const chunkMeshes= new Map();
+const worldData   = new Map();   // clave → Uint8Array (chunks modificados por jugador)
+const workerData  = new Map();   // clave → Uint8Array (chunks generados por worker)
+const chunkMeshes = new Map();
+const pendingWorker = new Set(); // chunks enviados al worker, esperando respuesta
+const _dirtyChunks  = new Set();
+
 function chunkKey(cx,cz){ return cx+','+cz; }
 
-function getChunkData(cx, cz){
-  const key=chunkKey(cx,cz);
-  if(worldData.has(key)) return worldData.get(key);
-  const data=new Uint8Array(CHUNK_SIZE*CHUNK_HEIGHT*CHUNK_SIZE);
-  const ox=cx*CHUNK_SIZE, oz=cz*CHUNK_SIZE;
-  function idx(lx,ly,lz){ return(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz; }
+// ── Web Worker pool ──
+const NUM_WORKERS = Math.max(2, Math.min(navigator.hardwareConcurrency||4, 6));
+const workers = [];
+let workerRoundRobin = 0;
+let workerJobId = 0;
+const workerJobMap = new Map(); // id → {cx,cz}
 
+for(let i=0;i<NUM_WORKERS;i++){
+  const w = new Worker('chunkWorker.js');
+  w.postMessage({type:'init', seed:WORLD_SEED, seaLevel:SEA_LEVEL});
+  w.onmessage = function(e){
+    const{cx,cz,id,data}=e.data;
+    const key=chunkKey(cx,cz);
+    pendingWorker.delete(key);
+    workerJobMap.delete(id);
+    if(!worldData.has(key)){
+      // Chunk sin modificaciones del jugador: usar datos del worker
+      workerData.set(key,data);
+    }
+    // Si ya existe en worldData (jugador modificó antes de recibir): no sobreescribir
+    if(!chunkMeshes.has(key)){
+      const grp = buildChunkMesh(cx,cz);
+      scene.add(grp);
+      chunkMeshes.set(key,grp);
+      updateLoadBar();
+    }
+  };
+  workers.push(w);
+}
+
+function sendToWorker(cx,cz){
+  const key=chunkKey(cx,cz);
+  if(pendingWorker.has(key))return;
+  pendingWorker.add(key);
+  const id = ++workerJobId;
+  workerJobMap.set(id,{cx,cz});
+  const w = workers[workerRoundRobin % NUM_WORKERS];
+  workerRoundRobin++;
+  w.postMessage({type:'generate',cx,cz,id});
+}
+
+// ── Acceso a datos de chunk ──
+function getChunkData(cx,cz){
+  const key=chunkKey(cx,cz);
+  // Prioridad: datos modificados por jugador > datos del worker
+  if(worldData.has(key))return worldData.get(key);
+  if(workerData.has(key))return workerData.get(key);
+  return null; // aún no generado
+}
+
+// Generar chunk en hilo principal SOLO si es urgente (spawn inicial)
+function generateChunkSync(cx,cz){
+  const key=chunkKey(cx,cz);
+  if(worldData.has(key))return worldData.get(key);
+  if(workerData.has(key))return workerData.get(key);
+
+  const data=new Uint8Array(CHUNK_SIZE*CHUNK_HEIGHT*CHUNK_SIZE);
+  const ox=cx*CHUNK_SIZE,oz=cz*CHUNK_SIZE;
+  function idx(lx,ly,lz){return(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz;}
   for(let lx=0;lx<CHUNK_SIZE;lx++){
     for(let lz=0;lz<CHUNK_SIZE;lz++){
-      const wx=ox+lx, wz=oz+lz;
+      const wx=ox+lx,wz=oz+lz;
       const biome=getBiome(wx,wz);
       const surfH=getSurface(wx,wz);
       for(let ly=0;ly<CHUNK_HEIGHT;ly++){
-        const worldY=ly;
         let b;
-        if(worldY<=1) b=STONE;
-        else if(worldY<=surfH){
-          const depth=surfH-worldY;
+        if(ly<=1)b=STONE;
+        else if(ly<=surfH){
+          const depth=surfH-ly;
           b=depth===0?surfaceBlock(biome,surfH):subBlock(biome,surfH,depth);
-        } else if(biome===BIOME.MANGROVE&&worldY<=SEA_LEVEL+1){
-          // Manglar: agua pantanosa en superficie
-          b=SWAMP_WATER;
-        } else if(worldY<=SEA_LEVEL){
-          b=WATER;
-        } else b=AIR;
+        }else if(biome===BIOME.MANGROVE&&ly<=SEA_LEVEL+1){b=SWAMP_WATER;}
+        else if(ly<=SEA_LEVEL)b=WATER;
+        else b=AIR;
         data[idx(lx,ly,lz)]=b;
       }
     }
   }
-
-  // Árboles
   for(let lx=0;lx<CHUNK_SIZE;lx++){
     for(let lz=0;lz<CHUNK_SIZE;lz++){
-      const wx=ox+lx, wz=oz+lz;
+      const wx=ox+lx,wz=oz+lz;
       const surfH=getSurface(wx,wz);
-      const minY=surfH+1, maxY=Math.min(surfH+24,CHUNK_HEIGHT-1);
-      for(let worldY=minY;worldY<=maxY;worldY++){
-        const ly=worldY;
-        if(ly<0||ly>=CHUNK_HEIGHT) continue;
-        if(data[idx(lx,ly,lz)]===AIR){
+      const maxY=Math.min(surfH+24,CHUNK_HEIGHT-1);
+      for(let worldY=surfH+1;worldY<=maxY;worldY++){
+        if(data[idx(lx,worldY,lz)]===AIR){
           const tb=treeBlockAt(wx,worldY,wz);
-          if(tb!==AIR) data[idx(lx,ly,lz)]=tb;
+          if(tb!==AIR)data[idx(lx,worldY,lz)]=tb;
         }
       }
     }
   }
-
-  worldData.set(key,data);
+  workerData.set(key,data);
   return data;
 }
 
-function getBlock(wx, worldY, wz){
-  if(worldY<0||worldY>=CHUNK_HEIGHT) return AIR;
-  const cx=Math.floor(wx/CHUNK_SIZE), cz=Math.floor(wz/CHUNK_SIZE);
+function getBlock(wx,worldY,wz){
+  if(worldY<0||worldY>=CHUNK_HEIGHT)return AIR;
+  const cx=Math.floor(wx/CHUNK_SIZE),cz=Math.floor(wz/CHUNK_SIZE);
   const lx=((wx%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
   const lz=((wz%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
-  const d=worldData.get(chunkKey(cx,cz));
+  // Prioridad: worldData (modificaciones del jugador), luego workerData
+  const key=chunkKey(cx,cz);
+  let d=worldData.get(key)||workerData.get(key);
   return d?d[(lx*CHUNK_HEIGHT+worldY)*CHUNK_SIZE+lz]:AIR;
 }
 
-function _writeBlock(wx, worldY, wz, type){
-  if(worldY<0||worldY>=CHUNK_HEIGHT) return null;
-  const cx=Math.floor(wx/CHUNK_SIZE), cz=Math.floor(wz/CHUNK_SIZE);
+function _writeBlock(wx,worldY,wz,type){
+  if(worldY<0||worldY>=CHUNK_HEIGHT)return null;
+  const cx=Math.floor(wx/CHUNK_SIZE),cz=Math.floor(wz/CHUNK_SIZE);
   const lx=((wx%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
   const lz=((wz%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
-  const d=getChunkData(cx,cz);
+  const key=chunkKey(cx,cz);
+  // Copiar desde workerData si no hay worldData aún
+  if(!worldData.has(key)){
+    const src=workerData.get(key);
+    if(src) worldData.set(key,new Uint8Array(src));
+    else worldData.set(key,new Uint8Array(CHUNK_SIZE*CHUNK_HEIGHT*CHUNK_SIZE));
+  }
+  const d=worldData.get(key);
   d[(lx*CHUNK_HEIGHT+worldY)*CHUNK_SIZE+lz]=type;
   return{cx,cz,lx,lz};
 }
 
-const _dirtyChunks=new Set();
-function markDirty(cx,cz){ _dirtyChunks.add(cx+','+cz); }
+function markDirty(cx,cz){_dirtyChunks.add(cx+','+cz);}
 
-function setBlock(wx, worldY, wz, type){
-  const r=_writeBlock(wx,worldY,wz,type); if(!r) return;
+function setBlock(wx,worldY,wz,type){
+  const r=_writeBlock(wx,worldY,wz,type);if(!r)return;
   const{cx,cz,lx,lz}=r;
   markDirty(cx,cz);
-  if(lx===0) markDirty(cx-1,cz);
-  if(lx===CHUNK_SIZE-1) markDirty(cx+1,cz);
-  if(lz===0) markDirty(cx,cz-1);
-  if(lz===CHUNK_SIZE-1) markDirty(cx,cz+1);
-  if(type===SAND||type===GRAVEL){ scheduleSand(wx,worldY,wz); scheduleSand(wx,worldY+1,wz); }
-  if(type===WATER||type===SWAMP_WATER){ scheduleWater(wx,worldY,wz); }
+  if(lx===0)markDirty(cx-1,cz);
+  if(lx===CHUNK_SIZE-1)markDirty(cx+1,cz);
+  if(lz===0)markDirty(cx,cz-1);
+  if(lz===CHUNK_SIZE-1)markDirty(cx,cz+1);
+  if(type===SAND||type===GRAVEL){scheduleSand(wx,worldY,wz);scheduleSand(wx,worldY+1,wz);}
+  if(type===WATER||type===SWAMP_WATER){scheduleWater(wx,worldY,wz);}
   if(type===AIR){
     scheduleSand(wx,worldY+1,wz);
     for(const[ddx,ddy,ddz]of[[1,0,0],[-1,0,0],[0,0,1],[0,0,-1],[0,1,0]]){
       const nb=getBlock(wx+ddx,worldY+ddy,wz+ddz);
-      if(nb===WATER||nb===SWAMP_WATER) scheduleWater(wx+ddx,worldY+ddy,wz+ddz);
+      if(nb===WATER||nb===SWAMP_WATER)scheduleWater(wx+ddx,worldY+ddy,wz+ddz);
     }
   }
 }
 
 function flushDirty(){
-  if(!_dirtyChunks.size) return;
+  if(!_dirtyChunks.size)return;
   for(const k of _dirtyChunks){
-    const[cx,cz]=k.split(',').map(Number); rebuildChunk(cx,cz);
+    const[cx,cz]=k.split(',').map(Number);rebuildChunk(cx,cz);
   }
   _dirtyChunks.clear();
 }
 
-// ══════════════════════════════════════════════════════════════
-//  FÍSICA: ARENA — caída más lenta y natural
-// ══════════════════════════════════════════════════════════════
-const sandQueue=new Map();
-// Delay aumentado: 8 ticks ≈ más lento y natural
-const SAND_FALL_DELAY=8;
-const sandEntities=[];
-
-function scheduleSand(wx,wy,wz){
-  const k=wx+'|'+wy+'|'+wz;
-  if(!sandQueue.has(k)) sandQueue.set(k,SAND_FALL_DELAY);
+// ── Barra de progreso de carga ──
+let totalChunksQueued=0;
+function updateLoadBar(){
+  const pending=pendingWorker.size+chunkQueue.length;
+  if(pending===0||totalChunksQueued===0){loadBar.style.width='0%';return;}
+  const pct=Math.round((1-pending/Math.max(totalChunksQueued,pending))*100);
+  loadBar.style.width=pct+'%';
 }
 
+// ══════════════════════════════════════════════════════════════
+//  FÍSICA: ARENA
+// ══════════════════════════════════════════════════════════════
+const sandQueue=new Map();
+const SAND_FALL_DELAY=4;
+const sandEntities=[];
+function scheduleSand(wx,wy,wz){
+  const k=wx+'|'+wy+'|'+wz;
+  if(!sandQueue.has(k))sandQueue.set(k,SAND_FALL_DELAY);
+}
 const _sandGeo=new THREE.BoxGeometry(0.98,0.98,0.98);
-
 function processSand(){
-  if(!sandQueue.size) return;
+  if(!sandQueue.size)return;
   const toFall=[];
-  for(const[k,timer] of sandQueue){
-    const newTimer=timer-1;
-    if(newTimer<=0){ toFall.push(k); sandQueue.delete(k); }
-    else sandQueue.set(k,newTimer);
+  for(const[k,timer]of sandQueue){
+    const nt=timer-1;
+    if(nt<=0){toFall.push(k);sandQueue.delete(k);}else sandQueue.set(k,nt);
   }
-  if(!toFall.length) return;
+  if(!toFall.length)return;
   const rebuild=new Set();
   for(const k of toFall){
     const[x,y,z]=k.split('|').map(Number);
     const b=getBlock(x,y,z);
-    if(b!==SAND&&b!==GRAVEL) continue;
+    if(b!==SAND&&b!==GRAVEL)continue;
     const below=getBlock(x,y-1,z);
     if(below===AIR||isWaterLike(below)){
       _writeBlock(x,y,z,AIR);
-      const faces=BLOCK_FACES[b];
-      const mat=new THREE.MeshLambertMaterial({map:faces[2]});
+      const mat=new THREE.MeshLambertMaterial({map:BLOCK_FACES[b][2]});
       const mesh=new THREE.Mesh(_sandGeo,mat);
       mesh.position.set(x+0.5,y+0.5,z+0.5);
       scene.add(mesh);
-      // velocidad inicial reducida
       sandEntities.push({mesh,x,y,z,type:b,vy:0,active:true});
       const cx=Math.floor(x/CHUNK_SIZE),cz=Math.floor(z/CHUNK_SIZE);
       rebuild.add(cx+','+cz);
@@ -950,62 +880,42 @@ function processSand(){
   }
   for(const k of rebuild){const[cx,cz]=k.split(',').map(Number);rebuildChunk(cx,cz);}
 }
-
 function updateSandEntities(dt){
   const toRemove=[];
   for(let i=0;i<sandEntities.length;i++){
-    const e=sandEntities[i];
-    if(!e.active) continue;
-    // Gravedad reducida a 12 (era 22), escala de movimiento reducida a 12 (era 18)
-    e.vy -= 12 * dt;
-    e.mesh.position.y += e.vy * dt * 12;
-
+    const e=sandEntities[i];if(!e.active)continue;
+    e.vy-=5*dt;
+    e.mesh.position.y+=e.vy*dt*12;
     const gx=Math.round(e.mesh.position.x-0.5);
     const gz=Math.round(e.mesh.position.z-0.5);
     const landY=Math.floor(e.mesh.position.y-0.5);
     const here=getBlock(gx,landY+1,gz);
-    const below=getBlock(gx,landY,gz);
-
     if((here!==AIR&&!isWaterLike(here))||e.mesh.position.y<1){
       const finalY=Math.max(1,landY+1);
-      if(getBlock(gx,finalY,gz)===AIR){
-        _writeBlock(gx,finalY,gz,e.type);
-        markDirty(Math.floor(gx/CHUNK_SIZE),Math.floor(gz/CHUNK_SIZE));
-        scheduleSand(gx,finalY+1,gz);
-      }
-      scene.remove(e.mesh); e.mesh.material.dispose(); e.active=false; toRemove.push(i);
-      flushDirty();
-    } else if(below!==AIR&&!isWaterLike(below)&&landY>=0){
-      if(getBlock(gx,landY+1,gz)===AIR){
-        _writeBlock(gx,landY+1,gz,e.type);
-        markDirty(Math.floor(gx/CHUNK_SIZE),Math.floor(gz/CHUNK_SIZE));
-        scheduleSand(gx,landY+2,gz);
-      }
-      scene.remove(e.mesh); e.mesh.material.dispose(); e.active=false; toRemove.push(i);
-      flushDirty();
+      if(getBlock(gx,finalY,gz)===AIR){_writeBlock(gx,finalY,gz,e.type);markDirty(Math.floor(gx/CHUNK_SIZE),Math.floor(gz/CHUNK_SIZE));scheduleSand(gx,finalY+1,gz);}
+      scene.remove(e.mesh);e.mesh.material.dispose();e.active=false;toRemove.push(i);flushDirty();
+    }else if(getBlock(gx,landY,gz)!==AIR&&!isWaterLike(getBlock(gx,landY,gz))&&landY>=0){
+      if(getBlock(gx,landY+1,gz)===AIR){_writeBlock(gx,landY+1,gz,e.type);markDirty(Math.floor(gx/CHUNK_SIZE),Math.floor(gz/CHUNK_SIZE));scheduleSand(gx,landY+2,gz);}
+      scene.remove(e.mesh);e.mesh.material.dispose();e.active=false;toRemove.push(i);flushDirty();
     }
   }
-  for(let i=toRemove.length-1;i>=0;i--) sandEntities.splice(toRemove[i],1);
+  for(let i=toRemove.length-1;i>=0;i--)sandEntities.splice(toRemove[i],1);
 }
 
 // ══════════════════════════════════════════════════════════════
 //  FÍSICA: AGUA
 // ══════════════════════════════════════════════════════════════
 const waterLevels=new Map();
-function wKey(wx,wy,wz){ return wx+'|'+wy+'|'+wz; }
-function getWL(wx,wy,wz){ return waterLevels.get(wKey(wx,wy,wz))||0; }
-function setWaterLevel(wx,wy,wz,lvl){
-  const k=wKey(wx,wy,wz);
-  if(lvl<=0) waterLevels.delete(k); else waterLevels.set(k,lvl);
-}
+function wKey(wx,wy,wz){return wx+'|'+wy+'|'+wz;}
+function getWL(wx,wy,wz){return waterLevels.get(wKey(wx,wy,wz))||0;}
+function setWaterLevel(wx,wy,wz,lvl){const k=wKey(wx,wy,wz);if(lvl<=0)waterLevels.delete(k);else waterLevels.set(k,lvl);}
 const waterQueue=new Set();
-function scheduleWater(wx,wy,wz){ waterQueue.add(wx+'|'+wy+'|'+wz); }
+function scheduleWater(wx,wy,wz){waterQueue.add(wx+'|'+wy+'|'+wz);}
 const WATER_BUDGET=48;
-
 function processWater(){
-  if(!waterQueue.size) return;
+  if(!waterQueue.size)return;
   const items=[...waterQueue].slice(0,WATER_BUDGET);
-  for(const k of items) waterQueue.delete(k);
+  for(const k of items)waterQueue.delete(k);
   const rebuild=new Set();
   function markRebuild(wx,wz){
     const cx=Math.floor(wx/CHUNK_SIZE),cz=Math.floor(wz/CHUNK_SIZE);
@@ -1019,25 +929,21 @@ function processWater(){
   }
   function tryPlace(wx,wy,wz,lvl){
     const prev=getBlock(wx,wy,wz);
-    if(prev!==AIR&&!isWaterLike(prev)) return false;
+    if(prev!==AIR&&!isWaterLike(prev))return false;
     const curLvl=getWL(wx,wy,wz);
-    if(isWaterLike(prev)&&curLvl>=lvl) return false;
-    _writeBlock(wx,wy,wz,WATER);
-    setWaterLevel(wx,wy,wz,lvl);
-    markRebuild(wx,wz); return true;
+    if(isWaterLike(prev)&&curLvl>=lvl)return false;
+    _writeBlock(wx,wy,wz,WATER);setWaterLevel(wx,wy,wz,lvl);markRebuild(wx,wz);return true;
   }
   for(const k of items){
     const[wx,wy,wz]=k.split('|').map(Number);
     const blk=getBlock(wx,wy,wz);
-    if(!isWaterLike(blk)) continue;
-    const myLvl=getWL(wx,wy,wz); if(myLvl<=0) continue;
+    if(!isWaterLike(blk))continue;
+    const myLvl=getWL(wx,wy,wz);if(myLvl<=0)continue;
     const belowB=getBlock(wx,wy-1,wz);
-    if(belowB===AIR||isWaterLike(belowB)){
-      if(tryPlace(wx,wy-1,wz,8)){scheduleWater(wx,wy-1,wz);continue;}
-    }
+    if(belowB===AIR||isWaterLike(belowB)){if(tryPlace(wx,wy-1,wz,8)){scheduleWater(wx,wy-1,wz);continue;}}
     if(myLvl>=2){
       const spread=myLvl-1;
-      for(const[ddx,ddz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      for(const[ddx,ddz]of[[1,0],[-1,0],[0,1],[0,-1]]){
         const nx=wx+ddx,nz=wz+ddz,nb=getBlock(nx,wy,nz);
         if(nb===AIR||isWaterLike(nb)){if(tryPlace(nx,wy,nz,spread))scheduleWater(nx,wy,nz);}
       }
@@ -1047,67 +953,49 @@ function processWater(){
 }
 
 // ══════════════════════════════════════════════════════════════
-//  MESH DE CHUNK — con frustum culling y oclusión mejorada
+//  MESH DE CHUNK
 // ══════════════════════════════════════════════════════════════
 const _matCache=new Map();
-function getMat(tex, isWater, isLeaves){
+function getMat(tex,isWater,isLeaves){
   const k=tex.uuid+'_'+isWater+'_'+isLeaves;
-  if(_matCache.has(k)) return _matCache.get(k);
+  if(_matCache.has(k))return _matCache.get(k);
   const m=new THREE.MeshLambertMaterial({
-    map:tex,
-    transparent:isWater||isLeaves,
-    opacity:isWater?0.72:1,
-    alphaTest:isLeaves?0.3:0,
-    side:isLeaves?THREE.DoubleSide:THREE.FrontSide,
-    depthWrite:!isWater,
+    map:tex,transparent:isWater||isLeaves,opacity:isWater?0.72:1,
+    alphaTest:isLeaves?0.3:0,side:isLeaves?THREE.DoubleSide:THREE.FrontSide,depthWrite:!isWater,
   });
-  _matCache.set(k,m);
-  return m;
+  _matCache.set(k,m);return m;
 }
-
-// Decide si se debe renderizar la cara entre myType y nbType
-function shouldRenderFace(myType, nbType){
-  if(nbType===AIR) return true;
-  if(isWaterLike(myType)) return !isWaterLike(nbType);
-  if(isLeavesLike(myType)) return !isLeavesLike(nbType);
-  // Si ambos son opacos: NO renderizar (interior del terreno vacío)
-  if(isOpaque(myType)&&isOpaque(nbType)) return false;
+function shouldRenderFace(myType,nbType){
+  if(nbType===AIR)return true;
+  if(isWaterLike(myType))return!isWaterLike(nbType);
+  if(isLeavesLike(myType))return!isLeavesLike(nbType);
+  if(isOpaque(myType)&&isOpaque(nbType))return false;
   return true;
 }
 
-// ── Altura máxima de bloques sólidos en un chunk (para bounding sphere) ──
-function buildChunkMesh(cx, cz){
+function buildChunkMesh(cx,cz){
   const data=getChunkData(cx,cz);
-  const ox=cx*CHUNK_SIZE, oz=cz*CHUNK_SIZE;
+  if(!data) return new THREE.Group();
+  const ox=cx*CHUNK_SIZE,oz=cz*CHUNK_SIZE;
   const byTex=new Map();
-  let minY=CHUNK_HEIGHT, maxY=0;
+  let minY=CHUNK_HEIGHT,maxY=0;
 
-  function arr(tex){
-    if(!byTex.has(tex)) byTex.set(tex,{p:[],u:[],i:[],n:0});
-    return byTex.get(tex);
-  }
+  function arr(tex){if(!byTex.has(tex))byTex.set(tex,{p:[],u:[],i:[],n:0});return byTex.get(tex);}
 
-  // ── Acceso rápido a vecinos en chunk propio vs chunks adyacentes ──
-  // Pre-cargar datos de chunks vecinos para evitar map lookups repetidos
   const neighbor={};
   const ndirs=[[-1,0],[1,0],[0,-1],[0,1]];
-  for(const[ndx,ndz] of ndirs){
+  for(const[ndx,ndz]of ndirs){
     const nk=chunkKey(cx+ndx,cz+ndz);
-    neighbor[ndx*10+ndz]=worldData.get(nk)||null;
+    const nd=worldData.get(nk)||workerData.get(nk)||null;
+    neighbor[ndx*10+ndz]=nd;
   }
 
   function fastGetBlock(lx,ly,lz){
-    if(ly<0||ly>=CHUNK_HEIGHT) return AIR;
-    // Mismo chunk
-    if(lx>=0&&lx<CHUNK_SIZE&&lz>=0&&lz<CHUNK_SIZE){
-      return data[(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz];
-    }
-    // Chunk vecino
+    if(ly<0||ly>=CHUNK_HEIGHT)return AIR;
+    if(lx>=0&&lx<CHUNK_SIZE&&lz>=0&&lz<CHUNK_SIZE)return data[(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz];
     let ndx=0,ndz=0,nlx=lx,nlz=lz;
-    if(lx<0){ndx=-1;nlx=lx+CHUNK_SIZE;}
-    else if(lx>=CHUNK_SIZE){ndx=1;nlx=lx-CHUNK_SIZE;}
-    if(lz<0){ndz=-1;nlz=lz+CHUNK_SIZE;}
-    else if(lz>=CHUNK_SIZE){ndz=1;nlz=lz-CHUNK_SIZE;}
+    if(lx<0){ndx=-1;nlx=lx+CHUNK_SIZE;}else if(lx>=CHUNK_SIZE){ndx=1;nlx=lx-CHUNK_SIZE;}
+    if(lz<0){ndz=-1;nlz=lz+CHUNK_SIZE;}else if(lz>=CHUNK_SIZE){ndz=1;nlz=lz-CHUNK_SIZE;}
     const nd=neighbor[ndx*10+ndz];
     return nd?nd[(nlx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+nlz]:AIR;
   }
@@ -1116,76 +1004,60 @@ function buildChunkMesh(cx, cz){
     for(let lz=0;lz<CHUNK_SIZE;lz++){
       for(let ly=1;ly<CHUNK_HEIGHT;ly++){
         const type=data[(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz];
-        if(type===AIR) continue;
-        const faces=BLOCK_FACES[type]; if(!faces) continue;
-        const wx=ox+lx, worldY=ly, wz=oz+lz;
-
-        if(ly>maxY) maxY=ly;
-        if(ly<minY) minY=ly;
-
+        if(type===AIR)continue;
+        const faces=BLOCK_FACES[type];if(!faces)continue;
+        const wx=ox+lx,worldY=ly,wz=oz+lz;
+        if(ly>maxY)maxY=ly;if(ly<minY)minY=ly;
         for(let f=0;f<6;f++){
           const[ndx,ndy,ndz]=FACE_DIRS[f];
-          // Usar fastGetBlock con coordenadas locales (evita map lookups)
           const nb=fastGetBlock(lx+ndx,ly+ndy,lz+ndz);
-          if(!shouldRenderFace(type,nb)) continue;
-
-          const tex=faces[f], a=arr(tex), vs=FACE_VERTS[f], base=a.n;
-          for(let v=0;v<4;v++){
-            a.p.push(wx+vs[v][0],worldY+vs[v][1],wz+vs[v][2]);
-            a.u.push(FACE_UV[v][0],FACE_UV[v][1]);
-          }
-          a.i.push(base,base+1,base+2,base,base+2,base+3);
-          a.n+=4;
+          if(!shouldRenderFace(type,nb))continue;
+          const tex=faces[f],a=arr(tex),vs=FACE_VERTS[f],base=a.n;
+          for(let v=0;v<4;v++){a.p.push(wx+vs[v][0],worldY+vs[v][1],wz+vs[v][2]);a.u.push(FACE_UV[v][0],FACE_UV[v][1]);}
+          a.i.push(base,base+1,base+2,base,base+2,base+3);a.n+=4;
         }
       }
     }
   }
 
   const group=new THREE.Group();
-  // Guardar bounding sphere centrada en el chunk para frustum culling
-  const centerX=ox+CHUNK_SIZE/2, centerZ=oz+CHUNK_SIZE/2;
-  const centerY=(minY+maxY)/2;
-  const halfH=(maxY-minY)/2+1;
-  const halfW=CHUNK_SIZE/2*1.42;
+  const centerX=ox+CHUNK_SIZE/2,centerZ=oz+CHUNK_SIZE/2;
+  const centerY=(minY+maxY)/2,halfH=(maxY-minY)/2+1,halfW=CHUNK_SIZE/2*1.42;
   group.userData.boundRadius=Math.sqrt(halfW*halfW+halfH*halfH)+2;
   group.userData.center=new THREE.Vector3(centerX,centerY,centerZ);
 
-  for(const[tex,a] of byTex){
-    if(!a.n) continue;
+  for(const[tex,a]of byTex){
+    if(!a.n)continue;
     const geo=new THREE.BufferGeometry();
     geo.setAttribute('position',new THREE.Float32BufferAttribute(a.p,3));
     geo.setAttribute('uv',new THREE.Float32BufferAttribute(a.u,2));
-    geo.setIndex(a.i);
-    geo.computeVertexNormals();
+    geo.setIndex(a.i);geo.computeVertexNormals();
     const isW=isWaterLike(tex)||tex===T.swampWater;
     const isL=isLeavesLike(tex)||(tex===T.tropLeaves||tex===T.cloudLeaves||tex===T.mangroveLeaves||tex===T.acaciaLeaves);
-    const mat=getMat(tex,isW,isL);
-    group.add(new THREE.Mesh(geo,mat));
+    group.add(new THREE.Mesh(geo,getMat(tex,isW,isL)));
   }
   return group;
 }
 
-function rebuildChunk(cx, cz){
+function rebuildChunk(cx,cz){
   const key=chunkKey(cx,cz);
-  if(!chunkMeshes.has(key)) return;
   const old=chunkMeshes.get(key);
-  scene.remove(old);
-  old.children.forEach(m=>{m.geometry.dispose();});
+  if(old){scene.remove(old);old.children.forEach(m=>m.geometry.dispose());}
+  const data=getChunkData(cx,cz);
+  if(!data)return;
   const grp=buildChunkMesh(cx,cz);
-  scene.add(grp); chunkMeshes.set(key,grp);
+  scene.add(grp);chunkMeshes.set(key,grp);
 }
 
 // ══════════════════════════════════════════════════════════════
-//  FRUSTUM CULLING DE CHUNKS
-//  Cada chunk tiene una bounding sphere; si no intersecta el frustum se oculta
+//  FRUSTUM CULLING
 // ══════════════════════════════════════════════════════════════
 function updateFrustumCulling(){
   camera.updateMatrixWorld();
-  _frustumMat.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  _frustumMat.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);
   _frustum.setFromProjectionMatrix(_frustumMat);
-
-  for(const[key,grp] of chunkMeshes){
-    if(!grp.userData.center) continue;
+  for(const[,grp]of chunkMeshes){
+    if(!grp.userData.center)continue;
     _chunkSphere.center.copy(grp.userData.center);
     _chunkSphere.radius=grp.userData.boundRadius;
     grp.visible=_frustum.intersectsSphere(_chunkSphere);
@@ -1193,63 +1065,84 @@ function updateFrustumCulling(){
 }
 
 // ══════════════════════════════════════════════════════════════
-//  CARGA DE CHUNKS
+//  CARGA DE CHUNKS — cola priorizada con worker
 // ══════════════════════════════════════════════════════════════
-const RENDER_DIST_MIN=10, RENDER_DIST_MAX=10;
-let RENDER_DIST=2;
-let lastCX=9999, lastCZ=9999;
-const chunkQueue=[];
-
-function precacheArea(pcx, pcz, radius){
-  const candidates=[];
-  for(let dx=-radius;dx<=radius;dx++){
-    for(let dz=-radius;dz<=radius;dz++){
-      if(dx*dx+dz*dz>radius*radius) continue;
-      candidates.push({cx:pcx+dx,cz:pcz+dz,d2:dx*dx+dz*dz});
-    }
-  }
-  candidates.sort((a,b)=>a.d2-b.d2);
-  for(const{cx,cz} of candidates){
-    getChunkData(cx,cz);
-    const key=chunkKey(cx,cz);
-    if(!chunkMeshes.has(key)){
-      const grp=buildChunkMesh(cx,cz);
-      scene.add(grp); chunkMeshes.set(key,grp);
-    }
-  }
-}
+const RENDER_DIST_MIN=4, RENDER_DIST_MAX=16;
+let RENDER_DIST=8;
+let lastCX=9999,lastCZ=9999;
+const chunkQueue=[];  // cola de chunks a solicitar al worker
 
 function updateChunks(){
   const pcx=Math.floor(camera.position.x/CHUNK_SIZE);
   const pcz=Math.floor(camera.position.z/CHUNK_SIZE);
 
   if(pcx!==lastCX||pcz!==lastCZ){
-    lastCX=pcx; lastCZ=pcz;
+    lastCX=pcx;lastCZ=pcz;
+    const newRequests=[];
     for(let dx=-RENDER_DIST;dx<=RENDER_DIST;dx++){
       for(let dz=-RENDER_DIST;dz<=RENDER_DIST;dz++){
-        if(dx*dx+dz*dz>RENDER_DIST*RENDER_DIST) continue;
+        if(dx*dx+dz*dz>RENDER_DIST*RENDER_DIST)continue;
         const cx=pcx+dx,cz=pcz+dz,key=chunkKey(cx,cz);
-        if(!chunkMeshes.has(key)) chunkQueue.push({cx,cz,d2:dx*dx+dz*dz});
+        if(!chunkMeshes.has(key)&&!pendingWorker.has(key)){
+          newRequests.push({cx,cz,d2:dx*dx+dz*dz});
+        }
       }
     }
+    newRequests.sort((a,b)=>a.d2-b.d2);
+    for(const r of newRequests) chunkQueue.push(r);
     chunkQueue.sort((a,b)=>a.d2-b.d2);
+    totalChunksQueued=Math.max(totalChunksQueued,chunkQueue.length+pendingWorker.size);
+
+    // Unload chunks lejanos
+    for(const[key,grp]of chunkMeshes){
+      const[kx,kz]=key.split(',').map(Number);
+      const d2=(kx-pcx)**2+(kz-pcz)**2;
+      if(d2>(RENDER_DIST+3)**2){
+        scene.remove(grp);grp.children.forEach(m=>m.geometry.dispose());
+        chunkMeshes.delete(key);
+        // Liberar workerData de chunks muy lejanos (>RENDER_DIST+8)
+        if(d2>(RENDER_DIST+8)**2){
+          workerData.delete(key);
+          // worldData NO se elimina (preservar cambios del jugador)
+        }
+      }
+    }
   }
 
-  let built=0;
-  while(chunkQueue.length>0&&built<2){
+  // Enviar hasta 4 chunks por frame al worker
+  let sent=0;
+  while(chunkQueue.length>0&&sent<4){
     const{cx,cz}=chunkQueue.shift();
-    const key=chunkKey(cx,cz); if(chunkMeshes.has(key)) continue;
-    getChunkData(cx,cz);
-    const grp=buildChunkMesh(cx,cz);
-    scene.add(grp); chunkMeshes.set(key,grp); built++;
+    const key=chunkKey(cx,cz);
+    if(chunkMeshes.has(key)||pendingWorker.has(key))continue;
+    // Si ya tenemos datos (workerData), construir mesh de inmediato
+    if(workerData.has(key)||worldData.has(key)){
+      const grp=buildChunkMesh(cx,cz);
+      scene.add(grp);chunkMeshes.set(key,grp);
+    }else{
+      sendToWorker(cx,cz);
+    }
+    sent++;
   }
+  updateLoadBar();
+}
 
-  for(const[key,grp] of chunkMeshes){
-    const[kx,kz]=key.split(',').map(Number);
-    if((kx-pcx)**2+(kz-pcz)**2>(RENDER_DIST+2)**2){
-      scene.remove(grp);
-      grp.children.forEach(m=>{m.geometry.dispose();});
-      chunkMeshes.delete(key);
+// Precache sincrónico para zona de spawn (radio pequeño)
+function precacheArea(pcx,pcz,radius){
+  const candidates=[];
+  for(let dx=-radius;dx<=radius;dx++){
+    for(let dz=-radius;dz<=radius;dz++){
+      if(dx*dx+dz*dz>radius*radius)continue;
+      candidates.push({cx:pcx+dx,cz:pcz+dz,d2:dx*dx+dz*dz});
+    }
+  }
+  candidates.sort((a,b)=>a.d2-b.d2);
+  for(const{cx,cz}of candidates){
+    generateChunkSync(cx,cz);
+    const key=chunkKey(cx,cz);
+    if(!chunkMeshes.has(key)){
+      const grp=buildChunkMesh(cx,cz);
+      scene.add(grp);chunkMeshes.set(key,grp);
     }
   }
 }
@@ -1261,51 +1154,51 @@ const outlineMesh=new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.BoxGeometry(1.003,1.003,1.003)),
   new THREE.LineBasicMaterial({color:0x000000})
 );
-outlineMesh.visible=false; scene.add(outlineMesh);
+outlineMesh.visible=false;scene.add(outlineMesh);
 
 // ══════════════════════════════════════════════════════════════
 //  RAYCAST
 // ══════════════════════════════════════════════════════════════
-let hitBlock=null, hitFace=null;
+let hitBlock=null,hitFace=null;
 function castRay(){
   const dir=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
-  const ori=camera.position.clone(); let prev=null;
+  const ori=camera.position.clone();let prev=null;
   for(let t=0.15;t<6;t+=0.04){
     const x=Math.floor(ori.x+dir.x*t),y=Math.floor(ori.y+dir.y*t),z=Math.floor(ori.z+dir.z*t);
     const b=getBlock(x,y,z);
     if(b!==AIR&&!isWaterLike(b)&&b!==SNOW){
       hitBlock=window.hitBlock={x,y,z};
       hitFace=window.hitFace=prev?{x:prev.x-x,y:prev.y-y,z:prev.z-z}:{x:0,y:1,z:0};
-      outlineMesh.position.set(x+0.5,y+0.5,z+0.5); outlineMesh.visible=true; return;
+      outlineMesh.position.set(x+0.5,y+0.5,z+0.5);outlineMesh.visible=true;return;
     }
     prev={x,y,z};
   }
-  hitBlock=window.hitBlock=null; hitFace=window.hitFace=null; outlineMesh.visible=false;
+  hitBlock=window.hitBlock=null;hitFace=window.hitFace=null;outlineMesh.visible=false;
 }
 
 // ══════════════════════════════════════════════════════════════
 //  UI
 // ══════════════════════════════════════════════════════════════
 function showMsg(txt){
-  msgEl.textContent=txt; msgEl.style.opacity='1';
-  clearTimeout(msgEl._t); msgEl._t=setTimeout(()=>msgEl.style.opacity='0',1400);
+  msgEl.textContent=txt;msgEl.style.opacity='1';
+  clearTimeout(msgEl._t);msgEl._t=setTimeout(()=>msgEl.style.opacity='0',1400);
 }
 function makeIcon(type){
-  const ic=document.createElement('canvas'); ic.width=ic.height=30;
-  const ctx=ic.getContext('2d'); const tex=BLOCK_ICON[type];
-  if(tex&&tex.image) ctx.drawImage(tex.image,0,0,30,30); return ic;
+  const ic=document.createElement('canvas');ic.width=ic.height=30;
+  const ctx=ic.getContext('2d');const tex=BLOCK_ICON[type];
+  if(tex&&tex.image)ctx.drawImage(tex.image,0,0,30,30);return ic;
 }
 function renderHotbar(){
   hotbarEl.innerHTML='';
   for(let i=0;i<8;i++){
     const slot=document.createElement('div');
-    slot.className='hslot'+(i===hotbarSel?' active':'');
+    slot.className='hslot'+(i===window.hotbarSel?' active':'');
     const t=hotbar[i];
     if(t!=null){
       slot.appendChild(makeIcon(t));
-      const cnt=document.createElement('span'); cnt.className='hcount';
-      cnt.textContent=inventory.get(t)||0; slot.appendChild(cnt);
-    } else slot.textContent=String(i+1);
+      const cnt=document.createElement('span');cnt.className='hcount';
+      cnt.textContent=inventory.get(t)||0;slot.appendChild(cnt);
+    }else slot.textContent=String(i+1);
     hotbarEl.appendChild(slot);
   }
 }
@@ -1314,20 +1207,20 @@ function renderInv(){
   const types=new Set([...hotbar.filter(Boolean),...inventory.keys()]);
   types.forEach(type=>{
     const cnt=inventory.get(type)||0;
-    const slot=document.createElement('div'); slot.className='islot';
+    const slot=document.createElement('div');slot.className='islot';
     slot.title=BLOCK_NAMES[type]||'?';
     slot.appendChild(makeIcon(type));
     if(cnt>0){const c=document.createElement('span');c.className='icount';c.textContent=cnt;slot.appendChild(c);}
     slot.onclick=()=>{
       if(cnt>0||hotbar.includes(type)){
-        hotbar[hotbarSel]=type;
+        hotbar[window.hotbarSel]=type;
         selblockEl.textContent='Bloque: '+BLOCK_NAMES[type];
-        renderHotbar(); renderInv();
+        renderHotbar();renderInv();
       }
     };
     const lbl=document.createElement('div');
     lbl.style.cssText='font-size:7px;color:#888;margin-top:1px';
-    lbl.textContent=BLOCK_NAMES[type]; slot.appendChild(lbl);
+    lbl.textContent=BLOCK_NAMES[type];slot.appendChild(lbl);
     invgrid.appendChild(slot);
   });
 }
@@ -1373,73 +1266,69 @@ document.getElementById('rddec').onclick=()=>{
 // ══════════════════════════════════════════════════════════════
 function findSafeSpawn(){
   for(let r=0;r<120;r++){
-    const angle=r*1.618*Math.PI*2;
-    const dist=r*0.8;
-    const sx=Math.round(Math.cos(angle)*dist);
-    const sz=Math.round(Math.sin(angle)*dist);
+    const angle=r*1.618*Math.PI*2,dist=r*0.8;
+    const sx=Math.round(Math.cos(angle)*dist),sz=Math.round(Math.sin(angle)*dist);
     const biome=getBiome(sx,sz);
-    if(biome===BIOME.OCEAN||biome===BIOME.DEEP_OCEAN||biome===BIOME.SWAMP||biome===BIOME.MANGROVE) continue;
+    if(biome===BIOME.OCEAN||biome===BIOME.DEEP_OCEAN||biome===BIOME.SWAMP||biome===BIOME.MANGROVE)continue;
     const surfH=getSurface(sx,sz);
-    if(surfH<=SEA_LEVEL+1) continue;
+    if(surfH<=SEA_LEVEL+1)continue;
     const spawnY=surfH+1;
     let clear=true;
     for(let dy=0;dy<3;dy++){if(getBlock(sx,spawnY+dy,sz)!==AIR){clear=false;break;}}
-    if(!clear) continue;
+    if(!clear)continue;
     let wet=false;
-    for(let ddx=-1;ddx<=1&&!wet;ddx++){
-      for(let ddz=-1;ddz<=1&&!wet;ddz++){
-        if(isWaterLike(getBlock(sx+ddx,spawnY-1,sz+ddz))) wet=true;
-      }
-    }
-    if(!wet) return{x:sx+0.5,y:spawnY+0.2,z:sz+0.5};
+    for(let ddx=-1;ddx<=1&&!wet;ddx++){for(let ddz=-1;ddz<=1&&!wet;ddz++){if(isWaterLike(getBlock(sx+ddx,spawnY-1,sz+ddz)))wet=true;}}
+    if(!wet)return{x:sx+0.5,y:spawnY+0.2,z:sz+0.5};
   }
   return{x:0.5,y:SEA_LEVEL+6,z:0.5};
 }
 
 // ── Globals ──
-window.getBlock=getBlock; window.setBlock=setBlock;
-window.hotbar=hotbar; window.inventory=inventory;
-window.addItem=addItem; window.removeItem=removeItem; window.hasItem=hasItem;
-window.BLOCK_NAMES=BLOCK_NAMES; window.selblockEl=selblockEl; window.showMsg=showMsg;
-window.renderHotbar=renderHotbar; window.renderInv=renderInv;
-window.blocker=blocker; window.invpanel=invpanel;
-window.hitBlock=hitBlock; window.hitFace=hitFace; window.castRay=castRay;
-window.getSurface=getSurface; window.getBiome=getBiome;
-window.camera=camera; window.scene=scene;
+window.getBlock=getBlock;window.setBlock=setBlock;
+window.hotbar=hotbar;window.inventory=inventory;
+window.addItem=addItem;window.removeItem=removeItem;window.hasItem=hasItem;
+window.BLOCK_NAMES=BLOCK_NAMES;window.selblockEl=selblockEl;window.showMsg=showMsg;
+window.renderHotbar=renderHotbar;window.renderInv=renderInv;
+window.blocker=blocker;window.invpanel=invpanel;
+window.hitBlock=hitBlock;window.hitFace=hitFace;window.castRay=castRay;
+window.getSurface=getSurface;window.getBiome=getBiome;
+window.camera=camera;window.scene=scene;
 window.hotbarSel=hotbarSel;
+window.BIOME=BIOME;
 
 // ── Init ──
 (function init(){
   const sp=findSafeSpawn();
-  const pcx=Math.floor(sp.x/CHUNK_SIZE), pcz=Math.floor(sp.z/CHUNK_SIZE);
-  precacheArea(pcx,pcz,4);
-  const s=document.createElement('script'); s.src='player.js';
-  s.onload=()=>{camera.position.set(sp.x,sp.y,sp.z); renderHotbar(); renderInv();};
-  s.onerror=()=>{camera.position.set(sp.x,sp.y,sp.z); renderHotbar(); renderInv(); console.warn('player.js no encontrado');};
+  const pcx=Math.floor(sp.x/CHUNK_SIZE),pcz=Math.floor(sp.z/CHUNK_SIZE);
+  precacheArea(pcx,pcz,3);
+  const s=document.createElement('script');s.src='player.js';
+  s.onload=()=>{
+    window.hotbarSel=0;
+    camera.position.set(sp.x,sp.y,sp.z);
+    renderHotbar();renderInv();
+  };
+  s.onerror=()=>{camera.position.set(sp.x,sp.y,sp.z);renderHotbar();renderInv();console.warn('player.js no encontrado');};
   document.body.appendChild(s);
 })();
 
 // ══════════════════════════════════════════════════════════════
 //  LOOP PRINCIPAL
 // ══════════════════════════════════════════════════════════════
-const clock=new THREE.Clock(); let frame=0;
+const clock=new THREE.Clock();let frame=0;
 function animate(){
   requestAnimationFrame(animate);
   const dt=Math.min(clock.getDelta(),0.05);
   frame++;
 
-  if(typeof updatePlayer==='function') updatePlayer(dt);
+  if(typeof updatePlayer==='function')updatePlayer(dt);
 
-  if(frame%2===0) processSand();
+  if(frame%2===0)processSand();
   updateSandEntities(dt);
-  if(frame%2===0) processWater();
+  if(frame%2===0)processWater();
 
-  if(frame%6===0){ updateChunks(); flushDirty(); }
-
-  // Frustum culling cada 3 frames
-  if(frame%3===0) updateFrustumCulling();
-
-  if(frame%8===0) updateOverlays();
+  if(frame%4===0){updateChunks();flushDirty();}
+  if(frame%3===0)updateFrustumCulling();
+  if(frame%8===0)updateOverlays();
 
   renderer.render(scene,camera);
 
@@ -1448,10 +1337,12 @@ function animate(){
     const bx=Math.floor(camera.position.x),bwY=Math.floor(camera.position.y),bz=Math.floor(camera.position.z);
     const biome=getBiome(bx,bz),surfH=getSurface(bx,bz);
     const modeTag=(typeof spectatorMode!=='undefined'&&spectatorMode)?' · 👁 ESP':'';
+    const pendCount=pendingWorker.size;
     hud.innerHTML=
       `Pos: ${camera.position.x.toFixed(1)}, ${bwY}, ${camera.position.z.toFixed(1)}<br>`+
       `Sup: Y${surfH} | Bioma: ${BIOME_NAMES[biome]}${modeTag}<br>`+
-      `Chunks: ${chunkMeshes.size} | Tris: ${info.render.triangles.toLocaleString()}`;
+      `Chunks: ${chunkMeshes.size} | Tris: ${info.render.triangles.toLocaleString()}`+
+      (pendCount>0?` | Gen: ${pendCount}`:'');
   }
 }
 animate();
