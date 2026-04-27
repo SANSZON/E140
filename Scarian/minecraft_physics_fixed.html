@@ -72,7 +72,8 @@ const WORLD_SEED   = Math.floor(Math.random() * 2147483647);
 document.getElementById('seedinfo').textContent = 'Semilla: ' + WORLD_SEED;
 
 const CHUNK_SIZE   = 16;
-const CHUNK_HEIGHT = 280; // Aumentado para super montañas (hasta 260)
+// MEJORA 3: CHUNK_HEIGHT aumentado de 280 a 520 para super montañas
+const CHUNK_HEIGHT = 720;
 
 const canvas  = document.getElementById('c');
 const wrap    = document.getElementById('wrap');
@@ -172,29 +173,63 @@ function ridgedFbm(x,z,octs,sc,seed,lacunarity=2.0,gain=0.6){
 }
 
 // ══════════════════════════════════════════════════════════════
-//  SPLINE CONTINENTALNESS → ALTURA
-//  Tabla exacta según especificación
+//  MEJORA 3: SPLINE CONTINENTALNESS → ALTURA (montañas mucho más grandes)
 // ══════════════════════════════════════════════════════════════
-
-// Puntos de control: [continentalness, targetHeight]
 const SPLINE_POINTS = [
-  [-1.00, 45],
-  [-0.80, 50],
-  [-0.60, 58],
-  [-0.40, 68],
-  [-0.20, 80],
-  [ 0.00, 95],
-  [ 0.15, 110],
-  [ 0.30, 125],
-  [ 0.40, 145],
-  [ 0.50, 165],
-  [ 0.65, 185],
-  [ 0.80, 210],
-  [ 0.90, 235],
-  [ 1.00, 260],
+
+  // 🌊 Océanos y valles profundos
+  [-1.00, 42],
+  [-0.90, 46],
+  [-0.80, 52],
+  [-0.70, 60],
+
+  // 🌾 Llanuras bajas
+  [-0.60, 68],
+  [-0.50, 78],
+  [-0.40, 90],
+
+  // 🌿 ZONAS MEDIAS IMPORTANTES (aquí vive el realismo)
+  [-0.30, 104],
+  [-0.20, 120],
+  [-0.10, 135],
+  [ 0.00, 148],
+
+  // 🌄 Colinas suaves
+  [ 0.05, 156],
+  [ 0.10, 166],
+  [ 0.15, 178],
+
+  // ⛰️ Colinas altas
+  [ 0.20, 192],
+  [ 0.25, 208],
+  [ 0.30, 226],
+
+  // 🏔️ Pre-montañas
+  [ 0.35, 246],
+  [ 0.40, 268],
+  [ 0.45, 292],
+
+  // 🗻 Montañas reales
+  [ 0.50, 318],
+  [ 0.55, 346],
+  [ 0.60, 376],
+
+  // ⛰️ Montañas altas
+  [ 0.65, 408],
+  [ 0.70, 442],
+  [ 0.75, 476],
+
+  // 🏔️ Zonas tipo fondo de montañas
+  [ 0.80, 508],
+  [ 0.85, 540],
+  [ 0.90, 575],
+
+  // 🗻 Super picos
+  [ 0.95, 610],
+  [ 1.00, 650],
+
 ];
 
-// Interpolación Catmull-Rom para spline suave entre puntos
 function catmullRom(p0, p1, p2, p3, t) {
   const t2 = t * t, t3 = t2 * t;
   return 0.5 * (
@@ -205,54 +240,39 @@ function catmullRom(p0, p1, p2, p3, t) {
   );
 }
 
-// Evalúa el spline dado un valor de continentalness [-1, 1]
 function evalSpline(cont) {
   const pts = SPLINE_POINTS;
   const n = pts.length;
-
-  // Clamp
   if (cont <= pts[0][0]) return pts[0][1];
   if (cont >= pts[n-1][0]) return pts[n-1][1];
-
-  // Encontrar segmento
   let seg = 0;
   for (let i = 0; i < n - 1; i++) {
     if (cont >= pts[i][0] && cont <= pts[i+1][0]) { seg = i; break; }
   }
-
-  // t local en el segmento [0,1]
   const t = (cont - pts[seg][0]) / (pts[seg+1][0] - pts[seg][0]);
-
-  // Índices con clamp para Catmull-Rom (necesita p-1 y p+2)
   const i0 = Math.max(0, seg - 1);
   const i1 = seg;
   const i2 = Math.min(n - 1, seg + 1);
   const i3 = Math.min(n - 1, seg + 2);
-
   return catmullRom(pts[i0][1], pts[i1][1], pts[i2][1], pts[i3][1], t);
 }
 
 // ══════════════════════════════════════════════════════════════
 //  RUIDOS DE TERRENO
 // ══════════════════════════════════════════════════════════════
-
-// continentalnessNoise: oct=5, freq=0.003 → escala=333, persist=0.5, lac=2.0
 function getContinentalness(wx, wz) {
   return fbm(wx, wz, 5, 333, WORLD_SEED + 1000, 2.0, 0.5);
 }
 
-// detailNoise: oct=3, freq=0.02 → escala=50, persist=0.4
 function getDetailNoise(wx, wz) {
   return fbm(wx, wz, 3, 50, WORLD_SEED + 2000, 2.0, 0.4);
 }
 
-// mountainNoise: oct=4, freq=0.002 → escala=500, persist=0.6
 function getMountainNoise(wx, wz) {
   return ridgedFbm(wx, wz, 4, 500, WORLD_SEED + 3000, 2.0, 0.6);
 }
 
 // ── SUPERFICIE FINAL ──
-// Usa la tabla de spline + detalle
 const _surfCache = new Map();
 
 function getSurface(wx, wz) {
@@ -265,30 +285,39 @@ function getSurface(wx, wz) {
 }
 
 function _calcSurface(wx, wz) {
-  // 1. Continentalness → altura base via spline
   const cont = getContinentalness(wx, wz);
   const heightBase = evalSpline(cont);
 
-  // 2. Detail noise: amplitud proporcional a la altura para más detalle en montañas
   const detail = getDetailNoise(wx, wz);
-  const detailAmp = lerp(4, 18, Math.max(0, (heightBase - 45) / 215));
+  const detailAmp = lerp(6, 24, Math.max(0, (heightBase - 45) / 425));
   const heightDetail = detail * detailAmp;
 
-  // 3. Mountain noise: añade crestas dramáticas en zonas altas
   const mNoise = getMountainNoise(wx, wz);
-  // Solo aplica mountainNoise significativamente en zonas altas (cont > 0.4)
-  const mBlend = Math.max(0, (cont - 0.3) / 0.7); // 0 en planicie, 1 en super montaña
-  const mountainAmp = mBlend * mBlend * 35;
+  const mBlend = Math.max(0, (cont - 0.3) / 0.7);
+
+  // MEJORA 4: mountainAmp con pow(mBlend, 2.4) * 65 → montañas más verticales
+  const mountainAmp = Math.pow(mBlend, 2.8) * 85;
   const heightMountain = mNoise * mountainAmp;
 
-  // 4. Micro-detalle de rugosidad
   const micro = fbm(wx, wz, 3, 12, WORLD_SEED + 8000, 2.0, 0.5) * lerp(0.5, 3.0, mBlend);
 
-  const total = heightBase + heightDetail + heightMountain + micro;
+  // MEJORA 5: Variación extra en altura
+  const megaDetail = fbm(wx, wz, 2, 6, WORLD_SEED + 9999, 2.0, 0.5) * 6;
+
+  let total = heightBase + heightDetail + heightMountain + micro + megaDetail;
+
+  // MEJORA 6: Zonas grandes semi planas (llanuras amplias)
+  const plainsNoise = fbm(wx, wz, 2, 900, WORLD_SEED + 60000, 2.0, 0.5);
+  const plainsFactor = (plainsNoise + 1) * 0.5;
+  // Aplanar solo en zonas de llanura natural (plainsFactor entre 0.35 y 0.55)
+  // y donde el continentalness no es de montaña alta
+  if (plainsFactor > 0.35 && plainsFactor < 0.55 && cont < 0.35) {
+    total = Math.round(total / 6) * 6;
+  }
+
   return Math.round(Math.max(8, Math.min(CHUNK_HEIGHT - 8, total)));
 }
 
-// Nombre del terreno según continentalness
 function getTerrainName(cont) {
   if (cont < -0.6) return 'Valle Profundo';
   if (cont < -0.3) return 'Llanura Baja';
@@ -343,7 +372,6 @@ const BLOCK_FACES={
   [WOOD]:  [T.wood,T.wood,T.woodTop,T.woodTop,T.wood,T.wood],
   [LEAVES]:[T.leaves,T.leaves,T.leaves,T.leaves,T.leaves,T.leaves],
   [SAND]:  [T.sand,T.sand,T.sand,T.sand,T.sand,T.sand],
-  // tall grass: solo cara superior (billboard), usamos la textura con color verde claro
   [TALL_GRASS]: [{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a}],
 };
 
@@ -355,7 +383,7 @@ const BLOCK_ICON={
 function isOpaque(b){return b!==AIR&&b!==LEAVES&&b!==TALL_GRASS;}
 function isSolidForPlayer(b){return b!==AIR&&b!==LEAVES&&b!==TALL_GRASS;}
 function shouldRenderFace(myType,nbType){
-  if(myType===TALL_GRASS) return false; // billboard separado
+  if(myType===TALL_GRASS) return false;
   if(nbType===AIR||nbType===TALL_GRASS) return true;
   if(myType===LEAVES) return nbType!==LEAVES;
   if(isOpaque(myType)&&isOpaque(nbType)) return false;
@@ -374,6 +402,25 @@ const FACE_VERTS=[
 const FACE_UV=[[0,0],[0,1],[1,1],[1,0]];
 
 // ══════════════════════════════════════════════════════════════
+//  MEJORA 6: FACTORES DE BRILLO POR CARA (Shading estilo Minecraft)
+//  Top=1.0, Sides=0.75, Bottom=0.55
+//  Índices de FACE_DIRS: 0=+X, 1=-X, 2=+Y(top), 3=-Y(bottom), 4=+Z, 5=-Z
+// ══════════════════════════════════════════════════════════════
+const FACE_BRIGHTNESS = [0.75, 0.75, 1.0, 0.55, 0.75, 0.75];
+
+// Calcular color con brillo de cara (devuelve THREE.Color)
+function getFaceColor(faceIndex, baseColor) {
+  const brightness = FACE_BRIGHTNESS[faceIndex];
+  if (baseColor !== null && baseColor !== undefined && baseColor !== 0xffffff) {
+    const r = ((baseColor >> 16) & 0xff) / 255;
+    const g = ((baseColor >> 8) & 0xff) / 255;
+    const b = (baseColor & 0xff) / 255;
+    return new THREE.Color(r * brightness, g * brightness, b * brightness);
+  }
+  return new THREE.Color(brightness, brightness, brightness);
+}
+
+// ══════════════════════════════════════════════════════════════
 //  INVENTARIO
 // ══════════════════════════════════════════════════════════════
 const inventory=new Map();
@@ -386,21 +433,15 @@ let hotbarSel=0;
 {let hi=0;for(const[t]of inventory){if(hi<8){hotbar[hi]=t;hi++;}}}
 
 // ══════════════════════════════════════════════════════════════
-//  CAPAS DEL TERRENO (OBLIGATORIO)
-//  grass_block → dirt → dirt → stone → stone → stone...
+//  CAPAS DEL TERRENO
 // ══════════════════════════════════════════════════════════════
-
-// Superficie: grass_block (si altura no es extrema de montaña) o stone
 function getSurfaceBlock(surfH, cont) {
-  // Cimas muy altas → siempre stone
-  if (cont > 0.85 && surfH > 220) return STONE;
-  if (cont > 0.70 && surfH > 200) return STONE;
-  if (cont > 0.55 && surfH > 185) return STONE;
-  // El resto: grass
+  if (cont > 0.85 && surfH > 350) return STONE;
+  if (cont > 0.70 && surfH > 300) return STONE;
+  if (cont > 0.55 && surfH > 250) return STONE;
   return GRASS;
 }
 
-// Profundidad 0=superficie, 1,2=dirt, >=3=stone
 function getLayerBlock(depth, surfH, cont) {
   if (depth === 0) return getSurfaceBlock(surfH, cont);
   if (depth <= 2) return DIRT;
@@ -408,8 +449,7 @@ function getLayerBlock(depth, surfH, cont) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  TALL GRASS (CESPED DECORATIVO)
-//  Renderizado como X-billboard (dos planos cruzados)
+//  TALL GRASS
 // ══════════════════════════════════════════════════════════════
 const _tallGrassMat = new THREE.MeshBasicMaterial({
   color: 0x7ecb4a,
@@ -420,81 +460,47 @@ const _tallGrassMat = new THREE.MeshBasicMaterial({
   depthWrite: false,
 });
 
-// Noise para densidad de césped: oct=2, freq=0.06
 function getTallGrassNoise(wx, wz) {
   return fbm(wx, wz, 2, 17, WORLD_SEED + 70000, 2.0, 0.5);
 }
 
 function shouldPlaceTallGrass(wx, wz, cont) {
-  // Solo en zonas con continentalness baja/media (llanuras y colinas)
   if (cont > 0.5) return false;
   const n = getTallGrassNoise(wx, wz);
-  // Normalizar a [0,1]
   const normalized = (n + 1) * 0.5;
-  // Densidad alta en llanuras (cont < 0.2), disminuye con altura
   const density = lerp(0.18, 0.08, Math.max(0, cont));
   const h = hash2(wx*7, wz*13, WORLD_SEED + 80000) / 0xFFFFFFFF;
   return normalized > 0.35 && h < density;
 }
 
-// Billboard X de cesped (dos planos cruzados)
-function buildTallGrassBillboard(wx, wy, wz) {
-  const geo = new THREE.BufferGeometry();
-  const positions = [], uvs = [], indices = [];
-  const x = wx + 0.5, y = wy, z = wz + 0.5;
-  const s = 0.5; // mitad anchura del quad
-
-  // Quad 1: diagonal \
-  positions.push(
-    x-s, y,   z-s,
-    x-s, y+1, z-s,
-    x+s, y+1, z+s,
-    x+s, y,   z+s
-  );
-  // Quad 2: diagonal /
-  positions.push(
-    x+s, y,   z-s,
-    x+s, y+1, z-s,
-    x-s, y+1, z+s,
-    x-s, y,   z+s
-  );
-
-  uvs.push(0,0,0,1,1,1,1,0, 0,0,0,1,1,1,1,0);
-  indices.push(0,1,2,0,2,3, 4,5,6,4,6,7);
-
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geo.setIndex(indices);
-  return geo;
-}
-
 // ══════════════════════════════════════════════════════════════
-//  ÁRBOLES — treeNoise: oct=3, freq=0.05, threshold=0.65
+//  MEJORA 1: ÁRBOLES MÁS FIELES A MINECRAFT
 // ══════════════════════════════════════════════════════════════
 function shouldPlaceTree(wx, wz, cont) {
-  // Sin árboles en zonas muy altas
   if (cont > 0.75) return false;
   if (hash2(wx, wz, WORLD_SEED) % 3 !== 0) return false;
-
-  // treeNoise: oct=3, freq=0.05 → escala=20
   const treeNoise = fbm(wx, wz, 3, 20, WORLD_SEED + 55555, 2.0, 0.5);
   const normalized = (treeNoise + 1) * 0.5;
-
-  // threshold=0.65 → normalized debe superar 1-0.65=0.35 (reescalado)
-  // Más árboles donde continentalness es media (colinas, montañas bajas)
   const baseDensity = lerp(0.18, 0.35, Math.max(0, Math.min(1, (cont + 0.5) / 1.0)));
   const h = hash2(wx, wz, WORLD_SEED + 77777) / 0xFFFFFFFF;
   return normalized > 0.55 && h < baseDensity;
 }
 
 function getTreeType(wx, wz) {
-  return hash2(wx, wz, WORLD_SEED + 99999) % 5;
+  return hash2(wx, wz, WORLD_SEED + 99999) % 3;
 }
 
 const treeDeferred = [];
 
+/**
+ * MEJORA 1: generateTree renovado — árboles estilo Minecraft real
+ * Tipo 0: Roble clásico  — tronco 4-5, copa 3 niveles
+ * Tipo 1: Roble alto     — tronco 6-7, copa más vertical
+ * Tipo 2: Árbol ancho    — tronco 4-5, copa expandida lateralmente
+ */
 function generateTree(data, ox, oz, lx, baseY, lz, treeType) {
   const wx = ox + lx, wz = oz + lz;
+
   function setLocal(dx, dy, dz, block) {
     const tlx = lx + dx, tly = baseY + dy, tlz = lz + dz;
     if (tly < 0 || tly >= CHUNK_HEIGHT) return;
@@ -506,29 +512,120 @@ function generateTree(data, ox, oz, lx, baseY, lz, treeType) {
     }
   }
 
-  let trunkH, crownR, crownH, crownStart;
-  const rng = (hash2(wx*3, wz*7, WORLD_SEED) % 3);
-  if (treeType === 0) { trunkH=4+rng; crownR=2; crownH=3; crownStart=trunkH-1; }
-  else if (treeType === 1) { trunkH=6+rng; crownR=2; crownH=4; crownStart=trunkH-2; }
-  else if (treeType === 2) { trunkH=4+rng%2; crownR=3; crownH=4; crownStart=trunkH-2; }
-  else if (treeType === 3) { trunkH=2+rng%2; crownR=2; crownH=2; crownStart=trunkH-1; }
-  else { trunkH=8+rng+1; crownR=3; crownH=5; crownStart=trunkH-3; }
+  const rng = hash2(wx*3, wz*7, WORLD_SEED) % 3;
 
-  for (let dy = 0; dy < trunkH; dy++) setLocal(0, dy, 0, WOOD);
+  if (treeType === 0) {
+    // ── Roble clásico ──
+    // Tronco recto: 4–5 bloques
+    const trunkH = 4 + (rng === 2 ? 1 : 0);
+    // Tronco vertical puro (sin ramas)
+    for (let dy = 0; dy < trunkH; dy++) setLocal(0, dy, 0, WOOD);
 
-  for (let dy = crownStart; dy <= trunkH + crownH; dy++) {
-    const relY = dy - (trunkH + crownH * 0.5);
-    const maxR = crownR * (1 - Math.abs(relY) / (crownH * 0.5 + crownR * 0.3));
-    const r = Math.max(0, maxR);
-    for (let dx = -Math.ceil(r+0.5); dx <= Math.ceil(r+0.5); dx++) {
-      for (let dz = -Math.ceil(r+0.5); dz <= Math.ceil(r+0.5); dz++) {
-        const dist = Math.sqrt(dx*dx + (relY*0.85)*(relY*0.85) + dz*dz);
-        if (dist <= r + 0.5) {
-          const en = (hash2(wx+dx, wz+dz, dy*17+WORLD_SEED) % 10) / 10.0;
-          if (dist <= r + 0.2 || (dist <= r + 0.7 && en > 0.35)) setLocal(dx, dy, dz, LEAVES);
-        }
+    // Copa: 3 niveles estilo Minecraft
+    // Nivel bajo (trunkH-1): 5x5 sin esquinas
+    const ly0 = trunkH - 1;
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue; // esquinas cortadas
+        setLocal(dx, ly0, dz, LEAVES);
       }
     }
+    // Nivel medio (trunkH): 5x5 sin esquinas
+    const ly1 = trunkH;
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+        setLocal(dx, ly1, dz, LEAVES);
+      }
+    }
+    // Nivel alto (trunkH+1): 3x3 compacto
+    const ly2 = trunkH + 1;
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        setLocal(dx, ly2, dz, LEAVES);
+      }
+    }
+    // Punta (trunkH+2): 1x1 o cruz
+    setLocal(0, trunkH + 2, 0, LEAVES);
+    if (rng < 2) {
+      setLocal(1, trunkH + 2, 0, LEAVES);
+      setLocal(-1, trunkH + 2, 0, LEAVES);
+      setLocal(0, trunkH + 2, 1, LEAVES);
+      setLocal(0, trunkH + 2, -1, LEAVES);
+    }
+
+  } else if (treeType === 1) {
+    // ── Roble alto ──
+    // Tronco recto: 6–7 bloques
+    const trunkH = 6 + (rng > 0 ? 1 : 0);
+    for (let dy = 0; dy < trunkH; dy++) setLocal(0, dy, 0, WOOD);
+
+    // Copa más vertical: 4 niveles
+    // Nivel bajo (trunkH-2): 3x3
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dz = -1; dz <= 1; dz++)
+        setLocal(dx, trunkH - 2, dz, LEAVES);
+    // Nivel medio-bajo (trunkH-1): 5x5 sin esquinas
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+        setLocal(dx, trunkH - 1, dz, LEAVES);
+      }
+    }
+    // Nivel medio-alto (trunkH): 3x3
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dz = -1; dz <= 1; dz++)
+        setLocal(dx, trunkH, dz, LEAVES);
+    // Nivel alto (trunkH+1): 3x3
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dz = -1; dz <= 1; dz++)
+        setLocal(dx, trunkH + 1, dz, LEAVES);
+    // Punta (trunkH+2): cruz
+    setLocal(0, trunkH + 2, 0, LEAVES);
+    setLocal(1, trunkH + 2, 0, LEAVES);
+    setLocal(-1, trunkH + 2, 0, LEAVES);
+    setLocal(0, trunkH + 2, 1, LEAVES);
+    setLocal(0, trunkH + 2, -1, LEAVES);
+
+  } else {
+    // ── Árbol ancho ──
+    // Tronco recto: 4–5 bloques
+    const trunkH = 4 + (rng === 0 ? 0 : 1);
+    for (let dy = 0; dy < trunkH; dy++) setLocal(0, dy, 0, WOOD);
+
+    // Copa expandida: 4 niveles más anchos
+    // Nivel muy bajo (trunkH-1): 7x7 redondeado
+    const ly0 = trunkH - 1;
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dz = -3; dz <= 3; dz++) {
+        if (Math.abs(dx) === 3 && Math.abs(dz) === 3) continue;
+        if (Math.abs(dx) === 3 && Math.abs(dz) >= 2) continue;
+        if (Math.abs(dz) === 3 && Math.abs(dx) >= 2) continue;
+        setLocal(dx, ly0, dz, LEAVES);
+      }
+    }
+    // Nivel bajo (trunkH): 5x5 sin esquinas
+    const ly1 = trunkH;
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+        setLocal(dx, ly1, dz, LEAVES);
+      }
+    }
+    // Nivel medio (trunkH+1): 5x5 sin esquinas
+    const ly2 = trunkH + 1;
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+        setLocal(dx, ly2, dz, LEAVES);
+      }
+    }
+    // Nivel alto (trunkH+2): 3x3
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dz = -1; dz <= 1; dz++)
+        setLocal(dx, trunkH + 2, dz, LEAVES);
+    // Punta (trunkH+3): 1x1
+    setLocal(0, trunkH + 3, 0, LEAVES);
   }
 }
 
@@ -545,16 +642,12 @@ function generateChunk(cx,cz){
   const data=new Uint8Array(CHUNK_SIZE*CHUNK_HEIGHT*CHUNK_SIZE);
   const ox=cx*CHUNK_SIZE, oz=cz*CHUNK_SIZE;
 
-  // ── PASO 1: Terreno base ──
   for(let lx=0;lx<CHUNK_SIZE;lx++){
     for(let lz=0;lz<CHUNK_SIZE;lz++){
       const wx=ox+lx, wz=oz+lz;
       const cont = getContinentalness(wx, wz);
       const surfH = getSurface(wx, wz);
-
-      // Bedrock
       data[(lx*CHUNK_HEIGHT+0)*CHUNK_SIZE+lz] = STONE;
-
       for(let ly=1;ly<CHUNK_HEIGHT;ly++){
         let b = AIR;
         if(ly <= surfH){
@@ -563,9 +656,7 @@ function generateChunk(cx,cz){
         }
         data[(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz] = b;
       }
-
-      // Rellenar huecos verticales: scan de abajo a arriba
-      let lastSolid = true; // el bedrock es sólido
+      let lastSolid = true;
       for(let ly=1;ly<=surfH;ly++){
         const idx=(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz;
         const b=data[idx];
@@ -577,21 +668,17 @@ function generateChunk(cx,cz){
 
   worldData.set(key, data);
 
-  // ── PASO 2: Árboles y cespéd ──
   for(let lx=0;lx<CHUNK_SIZE;lx++){
     for(let lz=0;lz<CHUNK_SIZE;lz++){
       const wx=ox+lx, wz=oz+lz;
       const cont = getContinentalness(wx, wz);
       const surfH = getSurface(wx, wz);
-
       const surfIdx=(lx*CHUNK_HEIGHT+surfH)*CHUNK_SIZE+lz;
       const surfBlock=data[surfIdx];
       if(surfBlock !== GRASS) continue;
-
       if(shouldPlaceTree(wx, wz, cont)){
         generateTree(data, ox, oz, lx, surfH+1, lz, getTreeType(wx, wz));
       } else {
-        // Césped decorativo sobre grass_block
         if(shouldPlaceTallGrass(wx, wz, cont)){
           const tgY = surfH + 1;
           if(tgY < CHUNK_HEIGHT){
@@ -603,9 +690,7 @@ function generateChunk(cx,cz){
     }
   }
 
-  // ── PASO 3: Bloques diferidos de árbol ──
   flushDeferredBlocks();
-
   return data;
 }
 
@@ -652,16 +737,34 @@ function flushDeferredBlocks(){
 }
 
 // ══════════════════════════════════════════════════════════════
-//  MATERIALES / MESH
+//  MEJORA 6: MATERIALES CON SHADING POR CARA
+//  Caché extendida con clave faceIndex para distintos brillos
 // ══════════════════════════════════════════════════════════════
-const MAT_CACHE=new Map();
-function getMat(tex,color=null){
-  if(!tex)return new THREE.MeshLambertMaterial({color:0xff00ff});
-  const key=tex.uuid+(color?'_'+color:'');
-  if(!MAT_CACHE.has(key))MAT_CACHE.set(key,new THREE.MeshLambertMaterial({map:tex,color:color??0xffffff}));
+const MAT_CACHE = new Map();
+
+function getMat(tex, color, faceIndex) {
+  if (!tex) return new THREE.MeshBasicMaterial({color:0xff00ff});
+  // Incluir faceIndex en la clave para materiales diferenciados por cara
+  const brightness = FACE_BRIGHTNESS[faceIndex !== undefined ? faceIndex : 2];
+  let effectiveColor;
+  if (color !== null && color !== undefined && color !== 0xffffff) {
+    const r = ((color >> 16) & 0xff) / 255;
+    const g = ((color >> 8) & 0xff) / 255;
+    const b = (color & 0xff) / 255;
+    effectiveColor = new THREE.Color(r * brightness, g * brightness, b * brightness);
+  } else {
+    effectiveColor = new THREE.Color(brightness, brightness, brightness);
+  }
+  const key = tex.uuid + '_' + effectiveColor.getHex() + '_' + brightness.toFixed(2);
+  if (!MAT_CACHE.has(key)) {
+    MAT_CACHE.set(key, new THREE.MeshLambertMaterial({map: tex, color: effectiveColor}));
+  }
   return MAT_CACHE.get(key);
 }
 
+// ══════════════════════════════════════════════════════════════
+//  BUILD CHUNK MESH — con shading por cara (Mejora 6)
+// ══════════════════════════════════════════════════════════════
 function buildChunkMesh(cx,cz){
   const data=worldData.get(chunkKey(cx,cz));
   if(!data)return new THREE.Group();
@@ -669,7 +772,6 @@ function buildChunkMesh(cx,cz){
   const byTex=new Map();
   let minY=CHUNK_HEIGHT,maxY=0;
 
-  // Geometrías para césped billboard
   const tallGrassPositions=[], tallGrassUVs=[], tallGrassIndices=[];
   let tgVCount=0;
 
@@ -684,13 +786,10 @@ function buildChunkMesh(cx,cz){
         const wx=ox+lx, worldY=ly, wz2=oz+lz;
         if(ly>maxY)maxY=ly;if(ly<minY)minY=ly;
 
-        // Tall grass → billboard especial
         if(type===TALL_GRASS){
           const x=wx+0.5, y=worldY, z=wz2+0.5;
           const s=0.5;
-          // Quad diagonal 1
           tallGrassPositions.push(x-s,y,z-s, x-s,y+1,z-s, x+s,y+1,z+s, x+s,y,z+s);
-          // Quad diagonal 2
           tallGrassPositions.push(x+s,y,z-s, x+s,y+1,z-s, x-s,y+1,z+s, x-s,y,z+s);
           tallGrassUVs.push(0,0,0,1,1,1,1,0, 0,0,0,1,1,1,1,0);
           const b=tgVCount;
@@ -716,11 +815,14 @@ function buildChunkMesh(cx,cz){
             }
           }
           if(!shouldRenderFace(type,nb))continue;
+
           const faceDef=faces[f];
           let tex,color=null;
           if(faceDef&&typeof faceDef==='object'&&faceDef.tex){tex=faceDef.tex;color=faceDef.color;}
           else{tex=faceDef;}
-          const mat=getMat(tex,color);
+
+          // MEJORA 6: Usar material con brillo de cara
+          const mat = getMat(tex, color, f);
           const a=arr(mat);
           const vs=FACE_VERTS[f];
           const base=a.n;
@@ -747,7 +849,6 @@ function buildChunkMesh(cx,cz){
     group.add(new THREE.Mesh(geo,mat));
   }
 
-  // Tall grass billboard mesh
   if(tgVCount > 0){
     const tgGeo=new THREE.BufferGeometry();
     tgGeo.setAttribute('position',new THREE.Float32BufferAttribute(tallGrassPositions,3));
@@ -792,8 +893,19 @@ function updateChunks(){
         if(dx*dx+dz*dz>RENDER_DIST*RENDER_DIST)continue;
         const cx=pcx+dx,cz=pcz+dz;
         const key=chunkKey(cx,cz);
-        if(!worldData.has(key))generateChunk(cx,cz);
-        if(!chunkMeshes.has(key)){const grp=buildChunkMesh(cx,cz);scene.add(grp);chunkMeshes.set(key,grp);}
+        const wasNew = !worldData.has(key);
+        if(wasNew) generateChunk(cx,cz);
+        if(!chunkMeshes.has(key)){
+          // MEJORA 7: Siempre rebuild al aparecer por primera vez
+          rebuildChunk(cx,cz);
+          // Forzar rebuild de vecinos inmediatos para corregir caras faltantes
+          if(wasNew){
+            rebuildChunk(cx-1,cz);
+            rebuildChunk(cx+1,cz);
+            rebuildChunk(cx,cz-1);
+            rebuildChunk(cx,cz+1);
+          }
+        }
       }
     }
     for(const[key,grp]of chunkMeshes){
@@ -804,6 +916,67 @@ function updateChunks(){
       }
     }
   }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MEJORA 2: MÚSICA AMBIENTAL ALEATORIA
+// ══════════════════════════════════════════════════════════════
+const musicTracks = [
+  "musica/musica1.mp3",
+  "musica/musica2.mp3"
+];
+
+let musicAudio = null;
+let musicTimeout = null;
+let musicEnabled = false; // Se activa solo tras interacción del usuario
+
+function scheduleNextTrack() {
+  // Pausa entre 2 y 5 minutos (en ms)
+  const delay = (120 + Math.random() * 180) * 1000;
+  musicTimeout = setTimeout(() => {
+    playRandomTrack();
+  }, delay);
+}
+
+function playRandomTrack() {
+  if (!musicEnabled) return;
+  // Seleccionar pista aleatoria
+  const trackIdx = Math.floor(Math.random() * musicTracks.length);
+  const trackPath = musicTracks[trackIdx];
+
+  if (musicAudio) {
+    musicAudio.pause();
+    musicAudio = null;
+  }
+
+  musicAudio = new Audio(trackPath);
+  // Volumen bajo: entre 0.2 y 0.35
+  musicAudio.volume = 0.2 + Math.random() * 0.15;
+
+  musicAudio.addEventListener('ended', () => {
+    // Al terminar, programar la siguiente con pausa
+    scheduleNextTrack();
+  });
+
+  musicAudio.addEventListener('error', () => {
+    // Si el archivo no existe, simplemente programar la siguiente
+    scheduleNextTrack();
+  });
+
+  musicAudio.play().catch(() => {
+    // Si no se puede reproducir (política del navegador), intentar más tarde
+    scheduleNextTrack();
+  });
+}
+
+function initMusic() {
+  if (musicEnabled) return;
+  musicEnabled = true;
+  // Empezar con una pausa inicial de 1-2 minutos
+  const initialDelay = (60 + Math.random() * 60) * 1000;
+  musicTimeout = setTimeout(() => {
+    playRandomTrack();
+  }, initialDelay);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -864,7 +1037,7 @@ for(let i=0;i<50;i++){
   const g=new THREE.BoxGeometry(10+Math.random()*28,1.3+Math.random()*1.2,7+Math.random()*18);
   const m=new THREE.MeshLambertMaterial({color:0xffffff,transparent:true,opacity:0.88});
   const c=new THREE.Mesh(g,m);
-  c.position.set((Math.random()-0.5)*1000, 200+Math.random()*30,(Math.random()-0.5)*1000);
+  c.position.set((Math.random()-0.5)*1000, 490+Math.random()*20,(Math.random()-0.5)*1000);
   scene.add(c);
 }
 
@@ -878,10 +1051,9 @@ function findSafeSpawn(){
     const angle=r*1.618*Math.PI*2, dist=r*2.0;
     const sx=Math.round(Math.cos(angle)*dist), sz=Math.round(Math.sin(angle)*dist);
     const cont=getContinentalness(sx,sz);
-    // Preferir zonas de colinas suaves/medias
     if(cont < -0.2 || cont > 0.45) continue;
     const surfH=getSurface(sx,sz);
-    if(surfH < 70 || surfH > 160) continue;
+    if(surfH < 100 || surfH > 220) continue;
     return{x:sx+0.5, y:surfH+2+1.62, z:sz+0.5};
   }
   const fallSurf=getSurface(0,0);
@@ -934,7 +1106,11 @@ document.addEventListener('keydown', e=>{
 });
 document.addEventListener('keyup', e=>{ keys[e.code]=false; });
 
-blocker.addEventListener('click',()=>{ canvas.requestPointerLock(); });
+blocker.addEventListener('click',()=>{
+  canvas.requestPointerLock();
+  // Iniciar música al primer click (interacción del usuario requerida)
+  initMusic();
+});
 document.getElementById('invclose').addEventListener('click',()=>{ invpanel.style.display='none'; });
 
 document.addEventListener('pointerlockchange',()=>{
@@ -1039,7 +1215,6 @@ function updateBreaking(dt){
   if(breakProgress>=1.0){finishBreaking(x,y,z,b);stopBreaking();}
 }
 
-// Item drops (simplificado)
 function updatePlayer(dt){
   camera.rotation.y+=yawDelta;
   camera.rotation.x=Math.max(-Math.PI/2+0.01,Math.min(Math.PI/2-0.01,camera.rotation.x+pitchDelta));
@@ -1084,7 +1259,7 @@ function updatePlayer(dt){
   pos.y+=dy2;
   if(collidesAt(pos.x,pos.y,pos.z)){onGround=dy2<0;pos.y-=dy2;velY=0;}
   else{onGround=false;}
-  if(pos.y-PLAYER_HEIGHT<5){pos.y=80+PLAYER_HEIGHT;velY=0;onGround=true;}
+  if(pos.y-PLAYER_HEIGHT<5){pos.y=150+PLAYER_HEIGHT;velY=0;onGround=true;}
   if(pos.y>CHUNK_HEIGHT-2)pos.y=CHUNK_HEIGHT-2;
 }
 
