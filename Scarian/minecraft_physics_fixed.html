@@ -73,7 +73,7 @@ document.getElementById('seedinfo').textContent = 'Semilla: ' + WORLD_SEED;
 
 const CHUNK_SIZE   = 16;
 // MEJORA 3: CHUNK_HEIGHT aumentado de 280 a 520 para super montañas
-const CHUNK_HEIGHT = 720;
+const CHUNK_HEIGHT = 520;
 
 const canvas  = document.getElementById('c');
 const wrap    = document.getElementById('wrap');
@@ -176,58 +176,20 @@ function ridgedFbm(x,z,octs,sc,seed,lacunarity=2.0,gain=0.6){
 //  MEJORA 3: SPLINE CONTINENTALNESS → ALTURA (montañas mucho más grandes)
 // ══════════════════════════════════════════════════════════════
 const SPLINE_POINTS = [
-
-  // 🌊 Océanos y valles profundos
-  [-1.00, 42],
-  [-0.90, 46],
-  [-0.80, 52],
-  [-0.70, 60],
-
-  // 🌾 Llanuras bajas
-  [-0.60, 68],
-  [-0.50, 78],
-  [-0.40, 90],
-
-  // 🌿 ZONAS MEDIAS IMPORTANTES (aquí vive el realismo)
-  [-0.30, 104],
-  [-0.20, 120],
-  [-0.10, 135],
-  [ 0.00, 148],
-
-  // 🌄 Colinas suaves
-  [ 0.05, 156],
-  [ 0.10, 166],
-  [ 0.15, 178],
-
-  // ⛰️ Colinas altas
-  [ 0.20, 192],
-  [ 0.25, 208],
-  [ 0.30, 226],
-
-  // 🏔️ Pre-montañas
-  [ 0.35, 246],
-  [ 0.40, 268],
-  [ 0.45, 292],
-
-  // 🗻 Montañas reales
-  [ 0.50, 318],
-  [ 0.55, 346],
-  [ 0.60, 376],
-
-  // ⛰️ Montañas altas
-  [ 0.65, 408],
-  [ 0.70, 442],
-  [ 0.75, 476],
-
-  // 🏔️ Zonas tipo fondo de montañas
-  [ 0.80, 508],
-  [ 0.85, 540],
-  [ 0.90, 575],
-
-  // 🗻 Super picos
-  [ 0.95, 610],
-  [ 1.00, 650],
-
+  [-1.00,  45],
+  [-0.80,  55],
+  [-0.60,  70],
+  [-0.40,  90],
+  [-0.20, 115],
+  [ 0.00, 140],
+  [ 0.15, 165],
+  [ 0.30, 195],
+  [ 0.40, 230],
+  [ 0.50, 270],
+  [ 0.65, 310],
+  [ 0.80, 360],
+  [ 0.90, 410],
+  [ 1.00, 470],
 ];
 
 function catmullRom(p0, p1, p2, p3, t) {
@@ -289,14 +251,14 @@ function _calcSurface(wx, wz) {
   const heightBase = evalSpline(cont);
 
   const detail = getDetailNoise(wx, wz);
-  const detailAmp = lerp(6, 24, Math.max(0, (heightBase - 45) / 425));
+  const detailAmp = lerp(4, 18, Math.max(0, (heightBase - 45) / 425));
   const heightDetail = detail * detailAmp;
 
   const mNoise = getMountainNoise(wx, wz);
   const mBlend = Math.max(0, (cont - 0.3) / 0.7);
 
   // MEJORA 4: mountainAmp con pow(mBlend, 2.4) * 65 → montañas más verticales
-  const mountainAmp = Math.pow(mBlend, 2.8) * 85;
+  const mountainAmp = Math.pow(mBlend, 2.4) * 65;
   const heightMountain = mNoise * mountainAmp;
 
   const micro = fbm(wx, wz, 3, 12, WORLD_SEED + 8000, 2.0, 0.5) * lerp(0.5, 3.0, mBlend);
@@ -306,13 +268,22 @@ function _calcSurface(wx, wz) {
 
   let total = heightBase + heightDetail + heightMountain + micro + megaDetail;
 
-  // MEJORA 6: Zonas grandes semi planas (llanuras amplias)
-  const plainsNoise = fbm(wx, wz, 2, 900, WORLD_SEED + 60000, 2.0, 0.5);
-  const plainsFactor = (plainsNoise + 1) * 0.5;
-  // Aplanar solo en zonas de llanura natural (plainsFactor entre 0.35 y 0.55)
-  // y donde el continentalness no es de montaña alta
-  if (plainsFactor > 0.35 && plainsFactor < 0.55 && cont < 0.35) {
-    total = Math.round(total / 6) * 6;
+  // LLANURAS Y COLINAS SUAVES — aplanado continuo sin agujeros ni saltos bruscos
+  // Solo actúa en cont < 0.20 (llanuras + colinas suaves según getTerrainName)
+  if (cont < 0.20) {
+    // plainsStrength: 1.0 en llanura pura (cont=-0.3), 0.0 en colinas medias (cont=0.20)
+    // Transición completamente suave con smoothstep — sin cortes ni bordes
+    const pb = Math.max(0, Math.min(1, (0.20 - cont) / 0.50));
+    const plainsStrength = pb * pb * (3 - 2 * pb);
+
+    // Altura objetivo: solo spline + detail suavizado (sin micro ni megaDetail ni mountain)
+    const plainsBase = heightBase + heightDetail * 0.4;
+    // Ondulación muy suave de gran escala — nunca crea huecos
+    const softWave = fbm(wx, wz, 2, 400, WORLD_SEED + 62000, 2.0, 0.45) * lerp(0, 5, 1 - plainsStrength);
+    const plainsTarget = plainsBase + softWave;
+
+    // Mezcla continua entre terreno completo y planicie suave — sin if abruptos
+    total = lerp(total, plainsTarget, plainsStrength);
   }
 
   return Math.round(Math.max(8, Math.min(CHUNK_HEIGHT - 8, total)));
@@ -334,11 +305,11 @@ function getTerrainName(cont) {
 // ══════════════════════════════════════════════════════════════
 //  BLOCK IDs
 // ══════════════════════════════════════════════════════════════
-const AIR=0, GRASS=1, DIRT=2, STONE=3, WOOD=4, LEAVES=5, SAND=6, TALL_GRASS=7;
+const AIR=0, GRASS=1, DIRT=2, STONE=3, WOOD=4, LEAVES=5, SAND=6, TALL_GRASS=7, LEAVES_FLOWER=8;
 
 const BLOCK_NAMES={
   [GRASS]:'Grass',[DIRT]:'Tierra',[STONE]:'Piedra',
-  [WOOD]:'Madera',[LEAVES]:'Hojas',[SAND]:'Arena',[TALL_GRASS]:'Cesped',
+  [WOOD]:'Madera',[LEAVES]:'Hojas',[SAND]:'Arena',[TALL_GRASS]:'Cesped',[LEAVES_FLOWER]:'Hojas Flor',
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -361,8 +332,9 @@ const T = {
   sand:      loadTex("textures/sand.png"),
   wood:      loadTex("textures/dark_oak_log.png"),
   woodTop:   loadTex("textures/dark_oak_log_top.png"),
-  leaves:    loadTex("textures/azalea_leaves.png"),
-  tallGrass: loadTex("textures/tall_grass_top.png"),
+  leaves:         loadTex("textures/azalea_leaves.png"),
+  leavesFlower:   loadTex("textures/flowering_azalea_leaves.png"),
+  tallGrass:      loadTex("textures/tall_grass_top.png"),
 };
 
 const BLOCK_FACES={
@@ -371,21 +343,22 @@ const BLOCK_FACES={
   [STONE]: [T.stone,T.stone,T.stone,T.stone,T.stone,T.stone],
   [WOOD]:  [T.wood,T.wood,T.woodTop,T.woodTop,T.wood,T.wood],
   [LEAVES]:[T.leaves,T.leaves,T.leaves,T.leaves,T.leaves,T.leaves],
+  [LEAVES_FLOWER]:[T.leavesFlower,T.leavesFlower,T.leavesFlower,T.leavesFlower,T.leavesFlower,T.leavesFlower],
   [SAND]:  [T.sand,T.sand,T.sand,T.sand,T.sand,T.sand],
   [TALL_GRASS]: [{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a}],
 };
 
 const BLOCK_ICON={
   [GRASS]:T.grassTop,[DIRT]:T.dirt,[STONE]:T.stone,
-  [WOOD]:T.woodTop,[LEAVES]:T.leaves,[SAND]:T.sand,[TALL_GRASS]:T.tallGrass,
+  [WOOD]:T.woodTop,[LEAVES]:T.leaves,[LEAVES_FLOWER]:T.leavesFlower,[SAND]:T.sand,[TALL_GRASS]:T.tallGrass,
 };
 
-function isOpaque(b){return b!==AIR&&b!==LEAVES&&b!==TALL_GRASS;}
-function isSolidForPlayer(b){return b!==AIR&&b!==LEAVES&&b!==TALL_GRASS;}
+function isOpaque(b){return b!==AIR&&b!==LEAVES&&b!==LEAVES_FLOWER&&b!==TALL_GRASS;}
+function isSolidForPlayer(b){return b!==AIR&&b!==LEAVES&&b!==LEAVES_FLOWER&&b!==TALL_GRASS;}
 function shouldRenderFace(myType,nbType){
   if(myType===TALL_GRASS) return false;
   if(nbType===AIR||nbType===TALL_GRASS) return true;
-  if(myType===LEAVES) return nbType!==LEAVES;
+  if(myType===LEAVES||myType===LEAVES_FLOWER) return nbType!==LEAVES&&nbType!==LEAVES_FLOWER;
   if(isOpaque(myType)&&isOpaque(nbType)) return false;
   return true;
 }
@@ -506,7 +479,7 @@ function generateTree(data, ox, oz, lx, baseY, lz, treeType) {
     if (tly < 0 || tly >= CHUNK_HEIGHT) return;
     if (tlx >= 0 && tlx < CHUNK_SIZE && tlz >= 0 && tlz < CHUNK_SIZE) {
       const i = (tlx * CHUNK_HEIGHT + tly) * CHUNK_SIZE + tlz;
-      if (data[i] === AIR || data[i] === LEAVES || data[i] === TALL_GRASS) data[i] = block;
+      if (data[i] === AIR || data[i] === LEAVES || data[i] === LEAVES_FLOWER || data[i] === TALL_GRASS) data[i] = block;
     } else {
       treeDeferred.push({wx: wx+dx, wy: tly, wz: wz+dz, block});
     }
@@ -538,20 +511,20 @@ function generateTree(data, ox, oz, lx, baseY, lz, treeType) {
         setLocal(dx, ly1, dz, LEAVES);
       }
     }
-    // Nivel alto (trunkH+1): 3x3 compacto
+    // Nivel alto (trunkH+1): 3x3 compacto — hojas flor
     const ly2 = trunkH + 1;
     for (let dx = -1; dx <= 1; dx++) {
       for (let dz = -1; dz <= 1; dz++) {
-        setLocal(dx, ly2, dz, LEAVES);
+        setLocal(dx, ly2, dz, LEAVES_FLOWER);
       }
     }
-    // Punta (trunkH+2): 1x1 o cruz
-    setLocal(0, trunkH + 2, 0, LEAVES);
+    // Punta (trunkH+2): 1x1 o cruz — hojas flor
+    setLocal(0, trunkH + 2, 0, LEAVES_FLOWER);
     if (rng < 2) {
-      setLocal(1, trunkH + 2, 0, LEAVES);
-      setLocal(-1, trunkH + 2, 0, LEAVES);
-      setLocal(0, trunkH + 2, 1, LEAVES);
-      setLocal(0, trunkH + 2, -1, LEAVES);
+      setLocal(1, trunkH + 2, 0, LEAVES_FLOWER);
+      setLocal(-1, trunkH + 2, 0, LEAVES_FLOWER);
+      setLocal(0, trunkH + 2, 1, LEAVES_FLOWER);
+      setLocal(0, trunkH + 2, -1, LEAVES_FLOWER);
     }
 
   } else if (treeType === 1) {
@@ -572,20 +545,20 @@ function generateTree(data, ox, oz, lx, baseY, lz, treeType) {
         setLocal(dx, trunkH - 1, dz, LEAVES);
       }
     }
-    // Nivel medio-alto (trunkH): 3x3
+    // Nivel medio-alto (trunkH): 3x3 — hojas flor
     for (let dx = -1; dx <= 1; dx++)
       for (let dz = -1; dz <= 1; dz++)
-        setLocal(dx, trunkH, dz, LEAVES);
-    // Nivel alto (trunkH+1): 3x3
+        setLocal(dx, trunkH, dz, LEAVES_FLOWER);
+    // Nivel alto (trunkH+1): 3x3 — hojas flor
     for (let dx = -1; dx <= 1; dx++)
       for (let dz = -1; dz <= 1; dz++)
-        setLocal(dx, trunkH + 1, dz, LEAVES);
-    // Punta (trunkH+2): cruz
-    setLocal(0, trunkH + 2, 0, LEAVES);
-    setLocal(1, trunkH + 2, 0, LEAVES);
-    setLocal(-1, trunkH + 2, 0, LEAVES);
-    setLocal(0, trunkH + 2, 1, LEAVES);
-    setLocal(0, trunkH + 2, -1, LEAVES);
+        setLocal(dx, trunkH + 1, dz, LEAVES_FLOWER);
+    // Punta (trunkH+2): cruz — hojas flor
+    setLocal(0, trunkH + 2, 0, LEAVES_FLOWER);
+    setLocal(1, trunkH + 2, 0, LEAVES_FLOWER);
+    setLocal(-1, trunkH + 2, 0, LEAVES_FLOWER);
+    setLocal(0, trunkH + 2, 1, LEAVES_FLOWER);
+    setLocal(0, trunkH + 2, -1, LEAVES_FLOWER);
 
   } else {
     // ── Árbol ancho ──
@@ -620,12 +593,12 @@ function generateTree(data, ox, oz, lx, baseY, lz, treeType) {
         setLocal(dx, ly2, dz, LEAVES);
       }
     }
-    // Nivel alto (trunkH+2): 3x3
+    // Nivel alto (trunkH+2): 3x3 — hojas flor
     for (let dx = -1; dx <= 1; dx++)
       for (let dz = -1; dz <= 1; dz++)
-        setLocal(dx, trunkH + 2, dz, LEAVES);
-    // Punta (trunkH+3): 1x1
-    setLocal(0, trunkH + 3, 0, LEAVES);
+        setLocal(dx, trunkH + 2, dz, LEAVES_FLOWER);
+    // Punta (trunkH+3): 1x1 — hojas flor
+    setLocal(0, trunkH + 3, 0, LEAVES_FLOWER);
   }
 }
 
@@ -730,7 +703,7 @@ function flushDeferredBlocks(){
     if(worldData.has(k)){
       const d=worldData.get(k);
       const i=(lx*CHUNK_HEIGHT+wy)*CHUNK_SIZE+lz;
-      if(d[i]===AIR||d[i]===LEAVES||d[i]===TALL_GRASS)d[i]=block;
+      if(d[i]===AIR||d[i]===LEAVES||d[i]===LEAVES_FLOWER||d[i]===TALL_GRASS)d[i]=block;
     }
   }
   treeDeferred.length=0;
