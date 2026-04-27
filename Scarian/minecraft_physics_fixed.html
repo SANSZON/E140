@@ -72,7 +72,6 @@ const WORLD_SEED   = Math.floor(Math.random() * 2147483647);
 document.getElementById('seedinfo').textContent = 'Semilla: ' + WORLD_SEED;
 
 const CHUNK_SIZE   = 16;
-// MEJORA 3: CHUNK_HEIGHT aumentado de 280 a 520 para super montañas
 const CHUNK_HEIGHT = 520;
 
 const canvas  = document.getElementById('c');
@@ -97,7 +96,8 @@ scene.background = new THREE.Color(0x87CEEB);
 scene.fog = new THREE.FogExp2(0x9ec8e8, 0.003);
 const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 500);
 camera.rotation.order = 'YXZ';
-scene.add(new THREE.AmbientLight(0xffffff, 0.78));
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.78);
+scene.add(ambientLight);
 const sun = new THREE.DirectionalLight(0xfff0cc, 1.05);
 sun.position.set(0.6,1,0.4).normalize(); scene.add(sun);
 
@@ -154,14 +154,12 @@ function perlin3(x,y,z,seed){
   );
 }
 
-// fBm estándar
 function fbm(x,z,octs,sc,seed,lacunarity=2.0,gain=0.5){
   let v=0,a=1,f=1,mx=0;
   for(let i=0;i<octs;i++){v+=perlin2(x*f/sc,z*f/sc,seed+i*997)*a;mx+=a;a*=gain;f*=lacunarity;}
   return v/mx;
 }
 
-// Ridged multifractal para crestas de montaña
 function ridgedFbm(x,z,octs,sc,seed,lacunarity=2.0,gain=0.6){
   let v=0,a=1,f=1,mx=0,prev=1;
   for(let i=0;i<octs;i++){
@@ -173,68 +171,37 @@ function ridgedFbm(x,z,octs,sc,seed,lacunarity=2.0,gain=0.6){
 }
 
 // ══════════════════════════════════════════════════════════════
-//  MEJORA 3: SPLINE CONTINENTALNESS → ALTURA (montañas mucho más grandes)
+//  SPLINE CONTINENTALNESS → ALTURA
 // ══════════════════════════════════════════════════════════════
 const SPLINE_POINTS = [
-  [-1.00,  45],
-  [-0.80,  55],
-  [-0.60,  70],
-  [-0.40,  90],
-  [-0.20, 115],
-  [ 0.00, 140],
-  [ 0.15, 165],
-  [ 0.30, 195],
-  [ 0.40, 230],
-  [ 0.50, 270],
-  [ 0.65, 310],
-  [ 0.80, 360],
-  [ 0.90, 410],
-  [ 1.00, 470],
+  [-1.00,  45],[-0.80,  55],[-0.60,  70],[-0.40,  90],[-0.20, 115],
+  [ 0.00, 140],[ 0.15, 165],[ 0.30, 195],[ 0.40, 230],[ 0.50, 270],
+  [ 0.65, 310],[ 0.80, 360],[ 0.90, 410],[ 1.00, 470],
 ];
 
 function catmullRom(p0, p1, p2, p3, t) {
   const t2 = t * t, t3 = t2 * t;
-  return 0.5 * (
-    (2*p1) +
-    (-p0 + p2) * t +
-    (2*p0 - 5*p1 + 4*p2 - p3) * t2 +
-    (-p0 + 3*p1 - 3*p2 + p3) * t3
-  );
+  return 0.5 * ((2*p1)+(-p0 + p2) * t+(2*p0 - 5*p1 + 4*p2 - p3) * t2+(-p0 + 3*p1 - 3*p2 + p3) * t3);
 }
 
 function evalSpline(cont) {
-  const pts = SPLINE_POINTS;
-  const n = pts.length;
+  const pts = SPLINE_POINTS, n = pts.length;
   if (cont <= pts[0][0]) return pts[0][1];
   if (cont >= pts[n-1][0]) return pts[n-1][1];
   let seg = 0;
-  for (let i = 0; i < n - 1; i++) {
-    if (cont >= pts[i][0] && cont <= pts[i+1][0]) { seg = i; break; }
-  }
+  for (let i = 0; i < n - 1; i++) { if (cont >= pts[i][0] && cont <= pts[i+1][0]) { seg = i; break; } }
   const t = (cont - pts[seg][0]) / (pts[seg+1][0] - pts[seg][0]);
-  const i0 = Math.max(0, seg - 1);
-  const i1 = seg;
-  const i2 = Math.min(n - 1, seg + 1);
-  const i3 = Math.min(n - 1, seg + 2);
-  return catmullRom(pts[i0][1], pts[i1][1], pts[i2][1], pts[i3][1], t);
+  const i0=Math.max(0,seg-1),i1=seg,i2=Math.min(n-1,seg+1),i3=Math.min(n-1,seg+2);
+  return catmullRom(pts[i0][1],pts[i1][1],pts[i2][1],pts[i3][1],t);
 }
 
 // ══════════════════════════════════════════════════════════════
 //  RUIDOS DE TERRENO
 // ══════════════════════════════════════════════════════════════
-function getContinentalness(wx, wz) {
-  return fbm(wx, wz, 5, 333, WORLD_SEED + 1000, 2.0, 0.5);
-}
+function getContinentalness(wx, wz) { return fbm(wx, wz, 5, 333, WORLD_SEED + 1000, 2.0, 0.5); }
+function getDetailNoise(wx, wz) { return fbm(wx, wz, 3, 50, WORLD_SEED + 2000, 2.0, 0.4); }
+function getMountainNoise(wx, wz) { return ridgedFbm(wx, wz, 4, 500, WORLD_SEED + 3000, 2.0, 0.6); }
 
-function getDetailNoise(wx, wz) {
-  return fbm(wx, wz, 3, 50, WORLD_SEED + 2000, 2.0, 0.4);
-}
-
-function getMountainNoise(wx, wz) {
-  return ridgedFbm(wx, wz, 4, 500, WORLD_SEED + 3000, 2.0, 0.6);
-}
-
-// ── SUPERFICIE FINAL ──
 const _surfCache = new Map();
 
 function getSurface(wx, wz) {
@@ -249,43 +216,24 @@ function getSurface(wx, wz) {
 function _calcSurface(wx, wz) {
   const cont = getContinentalness(wx, wz);
   const heightBase = evalSpline(cont);
-
   const detail = getDetailNoise(wx, wz);
   const detailAmp = lerp(4, 18, Math.max(0, (heightBase - 45) / 425));
   const heightDetail = detail * detailAmp;
-
   const mNoise = getMountainNoise(wx, wz);
   const mBlend = Math.max(0, (cont - 0.3) / 0.7);
-
-  // MEJORA 4: mountainAmp con pow(mBlend, 2.4) * 65 → montañas más verticales
   const mountainAmp = Math.pow(mBlend, 2.4) * 65;
   const heightMountain = mNoise * mountainAmp;
-
   const micro = fbm(wx, wz, 3, 12, WORLD_SEED + 8000, 2.0, 0.5) * lerp(0.5, 3.0, mBlend);
-
-  // MEJORA 5: Variación extra en altura
   const megaDetail = fbm(wx, wz, 2, 6, WORLD_SEED + 9999, 2.0, 0.5) * 6;
-
   let total = heightBase + heightDetail + heightMountain + micro + megaDetail;
-
-  // LLANURAS Y COLINAS SUAVES — aplanado continuo sin agujeros ni saltos bruscos
-  // Solo actúa en cont < 0.20 (llanuras + colinas suaves según getTerrainName)
   if (cont < 0.20) {
-    // plainsStrength: 1.0 en llanura pura (cont=-0.3), 0.0 en colinas medias (cont=0.20)
-    // Transición completamente suave con smoothstep — sin cortes ni bordes
     const pb = Math.max(0, Math.min(1, (0.20 - cont) / 0.50));
     const plainsStrength = pb * pb * (3 - 2 * pb);
-
-    // Altura objetivo: solo spline + detail suavizado (sin micro ni megaDetail ni mountain)
     const plainsBase = heightBase + heightDetail * 0.4;
-    // Ondulación muy suave de gran escala — nunca crea huecos
     const softWave = fbm(wx, wz, 2, 400, WORLD_SEED + 62000, 2.0, 0.45) * lerp(0, 5, 1 - plainsStrength);
     const plainsTarget = plainsBase + softWave;
-
-    // Mezcla continua entre terreno completo y planicie suave — sin if abruptos
     total = lerp(total, plainsTarget, plainsStrength);
   }
-
   return Math.round(Math.max(8, Math.min(CHUNK_HEIGHT - 8, total)));
 }
 
@@ -305,11 +253,13 @@ function getTerrainName(cont) {
 // ══════════════════════════════════════════════════════════════
 //  BLOCK IDs
 // ══════════════════════════════════════════════════════════════
-const AIR=0, GRASS=1, DIRT=2, STONE=3, WOOD=4, LEAVES=5, SAND=6, TALL_GRASS=7, LEAVES_FLOWER=8;
+const AIR=0, GRASS=1, DIRT=2, STONE=3, WOOD=4, LEAVES=5, SAND=6, TALL_GRASS=7, LEAVES_FLOWER=8,
+      CHERRY_LEAVES=9;
 
 const BLOCK_NAMES={
   [GRASS]:'Grass',[DIRT]:'Tierra',[STONE]:'Piedra',
-  [WOOD]:'Madera',[LEAVES]:'Hojas',[SAND]:'Arena',[TALL_GRASS]:'Cesped',[LEAVES_FLOWER]:'Hojas Flor',
+  [WOOD]:'Madera',[LEAVES]:'Hojas',[SAND]:'Arena',[TALL_GRASS]:'Cesped',
+  [LEAVES_FLOWER]:'Hojas Flor',[CHERRY_LEAVES]:'Hojas Cerezo',
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -325,16 +275,20 @@ function loadTex(path){
 }
 
 const T = {
-  grassTop:  loadTex("textures/grass_block_top.png"),
-  grassSide: loadTex("textures/grass_block_side.png"),
-  dirt:      loadTex("textures/dirt.png"),
-  stone:     loadTex("textures/stone.png"),
-  sand:      loadTex("textures/sand.png"),
-  wood:      loadTex("textures/dark_oak_log.png"),
-  woodTop:   loadTex("textures/dark_oak_log_top.png"),
+  grassTop:       loadTex("textures/grass_block_top.png"),
+  grassSide:      loadTex("textures/grass_block_side.png"),
+  dirt:           loadTex("textures/dirt.png"),
+  stone:          loadTex("textures/stone.png"),
+  sand:           loadTex("textures/sand.png"),
+  wood:           loadTex("textures/dark_oak_log.png"),
+  woodTop:        loadTex("textures/dark_oak_log_top.png"),
   leaves:         loadTex("textures/azalea_leaves.png"),
   leavesFlower:   loadTex("textures/flowering_azalea_leaves.png"),
+  cherryLeaves:   loadTex("textures/cherry_leaves.png"),
   tallGrass:      loadTex("textures/tall_grass_top.png"),
+  clouds:         loadTex("textures/clouds.png"),
+  sun:            loadTex("textures/sun.png"),
+  moon:           loadTex("textures/full_moon.png"),
 };
 
 const BLOCK_FACES={
@@ -344,21 +298,24 @@ const BLOCK_FACES={
   [WOOD]:  [T.wood,T.wood,T.woodTop,T.woodTop,T.wood,T.wood],
   [LEAVES]:[T.leaves,T.leaves,T.leaves,T.leaves,T.leaves,T.leaves],
   [LEAVES_FLOWER]:[T.leavesFlower,T.leavesFlower,T.leavesFlower,T.leavesFlower,T.leavesFlower,T.leavesFlower],
+  [CHERRY_LEAVES]:[T.cherryLeaves,T.cherryLeaves,T.cherryLeaves,T.cherryLeaves,T.cherryLeaves,T.cherryLeaves],
   [SAND]:  [T.sand,T.sand,T.sand,T.sand,T.sand,T.sand],
   [TALL_GRASS]: [{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a}],
 };
 
 const BLOCK_ICON={
   [GRASS]:T.grassTop,[DIRT]:T.dirt,[STONE]:T.stone,
-  [WOOD]:T.woodTop,[LEAVES]:T.leaves,[LEAVES_FLOWER]:T.leavesFlower,[SAND]:T.sand,[TALL_GRASS]:T.tallGrass,
+  [WOOD]:T.woodTop,[LEAVES]:T.leaves,[LEAVES_FLOWER]:T.leavesFlower,
+  [CHERRY_LEAVES]:T.cherryLeaves,[SAND]:T.sand,[TALL_GRASS]:T.tallGrass,
 };
 
-function isOpaque(b){return b!==AIR&&b!==LEAVES&&b!==LEAVES_FLOWER&&b!==TALL_GRASS;}
-function isSolidForPlayer(b){return b!==AIR&&b!==LEAVES&&b!==LEAVES_FLOWER&&b!==TALL_GRASS;}
+function isOpaque(b){return b!==AIR&&b!==LEAVES&&b!==LEAVES_FLOWER&&b!==CHERRY_LEAVES&&b!==TALL_GRASS;}
+function isSolidForPlayer(b){return b!==AIR&&b!==LEAVES&&b!==LEAVES_FLOWER&&b!==CHERRY_LEAVES&&b!==TALL_GRASS;}
 function shouldRenderFace(myType,nbType){
   if(myType===TALL_GRASS) return false;
   if(nbType===AIR||nbType===TALL_GRASS) return true;
-  if(myType===LEAVES||myType===LEAVES_FLOWER) return nbType!==LEAVES&&nbType!==LEAVES_FLOWER;
+  if(myType===LEAVES||myType===LEAVES_FLOWER||myType===CHERRY_LEAVES)
+    return nbType!==LEAVES&&nbType!==LEAVES_FLOWER&&nbType!==CHERRY_LEAVES;
   if(isOpaque(myType)&&isOpaque(nbType)) return false;
   return true;
 }
@@ -373,15 +330,8 @@ const FACE_VERTS=[
   [[0,0,0],[0,1,0],[1,1,0],[1,0,0]],
 ];
 const FACE_UV=[[0,0],[0,1],[1,1],[1,0]];
-
-// ══════════════════════════════════════════════════════════════
-//  MEJORA 6: FACTORES DE BRILLO POR CARA (Shading estilo Minecraft)
-//  Top=1.0, Sides=0.75, Bottom=0.55
-//  Índices de FACE_DIRS: 0=+X, 1=-X, 2=+Y(top), 3=-Y(bottom), 4=+Z, 5=-Z
-// ══════════════════════════════════════════════════════════════
 const FACE_BRIGHTNESS = [0.75, 0.75, 1.0, 0.55, 0.75, 0.75];
 
-// Calcular color con brillo de cara (devuelve THREE.Color)
 function getFaceColor(faceIndex, baseColor) {
   const brightness = FACE_BRIGHTNESS[faceIndex];
   if (baseColor !== null && baseColor !== undefined && baseColor !== 0xffffff) {
@@ -424,18 +374,7 @@ function getLayerBlock(depth, surfH, cont) {
 // ══════════════════════════════════════════════════════════════
 //  TALL GRASS
 // ══════════════════════════════════════════════════════════════
-const _tallGrassMat = new THREE.MeshBasicMaterial({
-  color: 0x7ecb4a,
-  map: T.tallGrass,
-  transparent: true,
-  alphaTest: 0.3,
-  side: THREE.DoubleSide,
-  depthWrite: false,
-});
-
-function getTallGrassNoise(wx, wz) {
-  return fbm(wx, wz, 2, 17, WORLD_SEED + 70000, 2.0, 0.5);
-}
+function getTallGrassNoise(wx, wz) { return fbm(wx, wz, 2, 17, WORLD_SEED + 70000, 2.0, 0.5); }
 
 function shouldPlaceTallGrass(wx, wz, cont) {
   if (cont > 0.5) return false;
@@ -447,8 +386,11 @@ function shouldPlaceTallGrass(wx, wz, cont) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  MEJORA 1: ÁRBOLES MÁS FIELES A MINECRAFT
+//  ÁRBOLES — con hojas CHERRY desde Y >= 215
 // ══════════════════════════════════════════════════════════════
+// CHERRY_HEIGHT_THRESHOLD: árboles sobre esta altura usan cherry_leaves
+const CHERRY_HEIGHT_THRESHOLD = 215;
+
 function shouldPlaceTree(wx, wz, cont) {
   if (cont > 0.75) return false;
   if (hash2(wx, wz, WORLD_SEED) % 3 !== 0) return false;
@@ -459,27 +401,29 @@ function shouldPlaceTree(wx, wz, cont) {
   return normalized > 0.55 && h < baseDensity;
 }
 
-function getTreeType(wx, wz) {
-  return hash2(wx, wz, WORLD_SEED + 99999) % 3;
-}
+function getTreeType(wx, wz) { return hash2(wx, wz, WORLD_SEED + 99999) % 3; }
 
 const treeDeferred = [];
 
 /**
- * MEJORA 1: generateTree renovado — árboles estilo Minecraft real
- * Tipo 0: Roble clásico  — tronco 4-5, copa 3 niveles
- * Tipo 1: Roble alto     — tronco 6-7, copa más vertical
- * Tipo 2: Árbol ancho    — tronco 4-5, copa expandida lateralmente
+ * generateTree — árboles estilo Minecraft
+ * baseY: Y del bloque base del tronco (superficie+1)
+ * usesCherry: si true, usar CHERRY_LEAVES en lugar de LEAVES/LEAVES_FLOWER
  */
-function generateTree(data, ox, oz, lx, baseY, lz, treeType) {
+function generateTree(data, ox, oz, lx, baseY, lz, treeType, usesCherry) {
   const wx = ox + lx, wz = oz + lz;
+
+  // Elegir tipo de hoja según altura
+  const leafMain   = usesCherry ? CHERRY_LEAVES : LEAVES;
+  const leafAccent = usesCherry ? CHERRY_LEAVES : LEAVES_FLOWER;
 
   function setLocal(dx, dy, dz, block) {
     const tlx = lx + dx, tly = baseY + dy, tlz = lz + dz;
     if (tly < 0 || tly >= CHUNK_HEIGHT) return;
     if (tlx >= 0 && tlx < CHUNK_SIZE && tlz >= 0 && tlz < CHUNK_SIZE) {
       const i = (tlx * CHUNK_HEIGHT + tly) * CHUNK_SIZE + tlz;
-      if (data[i] === AIR || data[i] === LEAVES || data[i] === LEAVES_FLOWER || data[i] === TALL_GRASS) data[i] = block;
+      if (data[i] === AIR || data[i] === LEAVES || data[i] === LEAVES_FLOWER ||
+          data[i] === CHERRY_LEAVES || data[i] === TALL_GRASS) data[i] = block;
     } else {
       treeDeferred.push({wx: wx+dx, wy: tly, wz: wz+dz, block});
     }
@@ -489,116 +433,71 @@ function generateTree(data, ox, oz, lx, baseY, lz, treeType) {
 
   if (treeType === 0) {
     // ── Roble clásico ──
-    // Tronco recto: 4–5 bloques
     const trunkH = 4 + (rng === 2 ? 1 : 0);
-    // Tronco vertical puro (sin ramas)
     for (let dy = 0; dy < trunkH; dy++) setLocal(0, dy, 0, WOOD);
-
-    // Copa: 3 niveles estilo Minecraft
     // Nivel bajo (trunkH-1): 5x5 sin esquinas
     const ly0 = trunkH - 1;
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dz = -2; dz <= 2; dz++) {
-        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue; // esquinas cortadas
-        setLocal(dx, ly0, dz, LEAVES);
-      }
-    }
+    for (let dx = -2; dx <= 2; dx++)
+      for (let dz = -2; dz <= 2; dz++)
+        if (!(Math.abs(dx)===2 && Math.abs(dz)===2)) setLocal(dx, ly0, dz, leafMain);
     // Nivel medio (trunkH): 5x5 sin esquinas
-    const ly1 = trunkH;
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dz = -2; dz <= 2; dz++) {
-        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
-        setLocal(dx, ly1, dz, LEAVES);
-      }
-    }
-    // Nivel alto (trunkH+1): 3x3 compacto — hojas flor
-    const ly2 = trunkH + 1;
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dz = -1; dz <= 1; dz++) {
-        setLocal(dx, ly2, dz, LEAVES_FLOWER);
-      }
-    }
-    // Punta (trunkH+2): 1x1 o cruz — hojas flor
-    setLocal(0, trunkH + 2, 0, LEAVES_FLOWER);
+    for (let dx = -2; dx <= 2; dx++)
+      for (let dz = -2; dz <= 2; dz++)
+        if (!(Math.abs(dx)===2 && Math.abs(dz)===2)) setLocal(dx, trunkH, dz, leafMain);
+    // Nivel alto (trunkH+1): 3x3
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dz = -1; dz <= 1; dz++)
+        setLocal(dx, trunkH+1, dz, leafAccent);
+    // Punta (trunkH+2)
+    setLocal(0, trunkH+2, 0, leafAccent);
     if (rng < 2) {
-      setLocal(1, trunkH + 2, 0, LEAVES_FLOWER);
-      setLocal(-1, trunkH + 2, 0, LEAVES_FLOWER);
-      setLocal(0, trunkH + 2, 1, LEAVES_FLOWER);
-      setLocal(0, trunkH + 2, -1, LEAVES_FLOWER);
+      setLocal(1,trunkH+2,0,leafAccent); setLocal(-1,trunkH+2,0,leafAccent);
+      setLocal(0,trunkH+2,1,leafAccent); setLocal(0,trunkH+2,-1,leafAccent);
     }
 
   } else if (treeType === 1) {
     // ── Roble alto ──
-    // Tronco recto: 6–7 bloques
     const trunkH = 6 + (rng > 0 ? 1 : 0);
     for (let dy = 0; dy < trunkH; dy++) setLocal(0, dy, 0, WOOD);
-
-    // Copa más vertical: 4 niveles
-    // Nivel bajo (trunkH-2): 3x3
     for (let dx = -1; dx <= 1; dx++)
       for (let dz = -1; dz <= 1; dz++)
-        setLocal(dx, trunkH - 2, dz, LEAVES);
-    // Nivel medio-bajo (trunkH-1): 5x5 sin esquinas
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dz = -2; dz <= 2; dz++) {
-        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
-        setLocal(dx, trunkH - 1, dz, LEAVES);
-      }
-    }
-    // Nivel medio-alto (trunkH): 3x3 — hojas flor
+        setLocal(dx, trunkH-2, dz, leafMain);
+    for (let dx = -2; dx <= 2; dx++)
+      for (let dz = -2; dz <= 2; dz++)
+        if (!(Math.abs(dx)===2 && Math.abs(dz)===2)) setLocal(dx, trunkH-1, dz, leafMain);
     for (let dx = -1; dx <= 1; dx++)
       for (let dz = -1; dz <= 1; dz++)
-        setLocal(dx, trunkH, dz, LEAVES_FLOWER);
-    // Nivel alto (trunkH+1): 3x3 — hojas flor
+        setLocal(dx, trunkH, dz, leafAccent);
     for (let dx = -1; dx <= 1; dx++)
       for (let dz = -1; dz <= 1; dz++)
-        setLocal(dx, trunkH + 1, dz, LEAVES_FLOWER);
-    // Punta (trunkH+2): cruz — hojas flor
-    setLocal(0, trunkH + 2, 0, LEAVES_FLOWER);
-    setLocal(1, trunkH + 2, 0, LEAVES_FLOWER);
-    setLocal(-1, trunkH + 2, 0, LEAVES_FLOWER);
-    setLocal(0, trunkH + 2, 1, LEAVES_FLOWER);
-    setLocal(0, trunkH + 2, -1, LEAVES_FLOWER);
+        setLocal(dx, trunkH+1, dz, leafAccent);
+    setLocal(0,trunkH+2,0,leafAccent); setLocal(1,trunkH+2,0,leafAccent);
+    setLocal(-1,trunkH+2,0,leafAccent); setLocal(0,trunkH+2,1,leafAccent);
+    setLocal(0,trunkH+2,-1,leafAccent);
 
   } else {
     // ── Árbol ancho ──
-    // Tronco recto: 4–5 bloques
     const trunkH = 4 + (rng === 0 ? 0 : 1);
     for (let dy = 0; dy < trunkH; dy++) setLocal(0, dy, 0, WOOD);
-
-    // Copa expandida: 4 niveles más anchos
-    // Nivel muy bajo (trunkH-1): 7x7 redondeado
     const ly0 = trunkH - 1;
     for (let dx = -3; dx <= 3; dx++) {
       for (let dz = -3; dz <= 3; dz++) {
-        if (Math.abs(dx) === 3 && Math.abs(dz) === 3) continue;
-        if (Math.abs(dx) === 3 && Math.abs(dz) >= 2) continue;
-        if (Math.abs(dz) === 3 && Math.abs(dx) >= 2) continue;
-        setLocal(dx, ly0, dz, LEAVES);
+        if (Math.abs(dx)===3 && Math.abs(dz)===3) continue;
+        if (Math.abs(dx)===3 && Math.abs(dz)>=2) continue;
+        if (Math.abs(dz)===3 && Math.abs(dx)>=2) continue;
+        setLocal(dx, ly0, dz, leafMain);
       }
     }
-    // Nivel bajo (trunkH): 5x5 sin esquinas
-    const ly1 = trunkH;
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dz = -2; dz <= 2; dz++) {
-        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
-        setLocal(dx, ly1, dz, LEAVES);
-      }
-    }
-    // Nivel medio (trunkH+1): 5x5 sin esquinas
-    const ly2 = trunkH + 1;
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dz = -2; dz <= 2; dz++) {
-        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
-        setLocal(dx, ly2, dz, LEAVES);
-      }
-    }
-    // Nivel alto (trunkH+2): 3x3 — hojas flor
+    for (let dx = -2; dx <= 2; dx++)
+      for (let dz = -2; dz <= 2; dz++)
+        if (!(Math.abs(dx)===2 && Math.abs(dz)===2)) setLocal(dx, trunkH, dz, leafMain);
+    for (let dx = -2; dx <= 2; dx++)
+      for (let dz = -2; dz <= 2; dz++)
+        if (!(Math.abs(dx)===2 && Math.abs(dz)===2)) setLocal(dx, trunkH+1, dz, leafMain);
     for (let dx = -1; dx <= 1; dx++)
       for (let dz = -1; dz <= 1; dz++)
-        setLocal(dx, trunkH + 2, dz, LEAVES_FLOWER);
-    // Punta (trunkH+3): 1x1 — hojas flor
-    setLocal(0, trunkH + 3, 0, LEAVES_FLOWER);
+        setLocal(dx, trunkH+2, dz, leafAccent);
+    setLocal(0, trunkH+3, 0, leafAccent);
   }
 }
 
@@ -623,10 +522,7 @@ function generateChunk(cx,cz){
       data[(lx*CHUNK_HEIGHT+0)*CHUNK_SIZE+lz] = STONE;
       for(let ly=1;ly<CHUNK_HEIGHT;ly++){
         let b = AIR;
-        if(ly <= surfH){
-          const depth = surfH - ly;
-          b = getLayerBlock(depth, surfH, cont);
-        }
+        if(ly <= surfH){ const depth = surfH - ly; b = getLayerBlock(depth, surfH, cont); }
         data[(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz] = b;
       }
       let lastSolid = true;
@@ -650,7 +546,9 @@ function generateChunk(cx,cz){
       const surfBlock=data[surfIdx];
       if(surfBlock !== GRASS) continue;
       if(shouldPlaceTree(wx, wz, cont)){
-        generateTree(data, ox, oz, lx, surfH+1, lz, getTreeType(wx, wz));
+        // Árbol cherry si la superficie está a >= CHERRY_HEIGHT_THRESHOLD
+        const usesCherry = (surfH >= CHERRY_HEIGHT_THRESHOLD);
+        generateTree(data, ox, oz, lx, surfH+1, lz, getTreeType(wx, wz), usesCherry);
       } else {
         if(shouldPlaceTallGrass(wx, wz, cont)){
           const tgY = surfH + 1;
@@ -703,21 +601,19 @@ function flushDeferredBlocks(){
     if(worldData.has(k)){
       const d=worldData.get(k);
       const i=(lx*CHUNK_HEIGHT+wy)*CHUNK_SIZE+lz;
-      if(d[i]===AIR||d[i]===LEAVES||d[i]===LEAVES_FLOWER||d[i]===TALL_GRASS)d[i]=block;
+      if(d[i]===AIR||d[i]===LEAVES||d[i]===LEAVES_FLOWER||d[i]===CHERRY_LEAVES||d[i]===TALL_GRASS) d[i]=block;
     }
   }
   treeDeferred.length=0;
 }
 
 // ══════════════════════════════════════════════════════════════
-//  MEJORA 6: MATERIALES CON SHADING POR CARA
-//  Caché extendida con clave faceIndex para distintos brillos
+//  MATERIALES CON SHADING POR CARA
 // ══════════════════════════════════════════════════════════════
 const MAT_CACHE = new Map();
 
 function getMat(tex, color, faceIndex) {
   if (!tex) return new THREE.MeshBasicMaterial({color:0xff00ff});
-  // Incluir faceIndex en la clave para materiales diferenciados por cara
   const brightness = FACE_BRIGHTNESS[faceIndex !== undefined ? faceIndex : 2];
   let effectiveColor;
   if (color !== null && color !== undefined && color !== 0xffffff) {
@@ -730,13 +626,13 @@ function getMat(tex, color, faceIndex) {
   }
   const key = tex.uuid + '_' + effectiveColor.getHex() + '_' + brightness.toFixed(2);
   if (!MAT_CACHE.has(key)) {
-    MAT_CACHE.set(key, new THREE.MeshLambertMaterial({map: tex, color: effectiveColor}));
+    MAT_CACHE.set(key, new THREE.MeshBasicMaterial({map: tex, color: effectiveColor}));
   }
   return MAT_CACHE.get(key);
 }
 
 // ══════════════════════════════════════════════════════════════
-//  BUILD CHUNK MESH — con shading por cara (Mejora 6)
+//  BUILD CHUNK MESH
 // ══════════════════════════════════════════════════════════════
 function buildChunkMesh(cx,cz){
   const data=worldData.get(chunkKey(cx,cz));
@@ -755,13 +651,11 @@ function buildChunkMesh(cx,cz){
       for(let ly=1;ly<CHUNK_HEIGHT;ly++){
         const type=data[(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz];
         if(type===AIR)continue;
-
         const wx=ox+lx, worldY=ly, wz2=oz+lz;
         if(ly>maxY)maxY=ly;if(ly<minY)minY=ly;
 
         if(type===TALL_GRASS){
-          const x=wx+0.5, y=worldY, z=wz2+0.5;
-          const s=0.5;
+          const x=wx+0.5, y=worldY, z=wz2+0.5, s=0.5;
           tallGrassPositions.push(x-s,y,z-s, x-s,y+1,z-s, x+s,y+1,z+s, x+s,y,z+s);
           tallGrassPositions.push(x+s,y,z-s, x+s,y+1,z-s, x-s,y+1,z+s, x-s,y,z+s);
           tallGrassUVs.push(0,0,0,1,1,1,1,0, 0,0,0,1,1,1,1,0);
@@ -794,7 +688,6 @@ function buildChunkMesh(cx,cz){
           if(faceDef&&typeof faceDef==='object'&&faceDef.tex){tex=faceDef.tex;color=faceDef.color;}
           else{tex=faceDef;}
 
-          // MEJORA 6: Usar material con brillo de cara
           const mat = getMat(tex, color, f);
           const a=arr(mat);
           const vs=FACE_VERTS[f];
@@ -828,12 +721,8 @@ function buildChunkMesh(cx,cz){
     tgGeo.setAttribute('uv',new THREE.Float32BufferAttribute(tallGrassUVs,2));
     tgGeo.setIndex(tallGrassIndices);
     const tgMat=new THREE.MeshBasicMaterial({
-      map: T.tallGrass,
-      color: 0x7ecb4a,
-      transparent: true,
-      alphaTest: 0.25,
-      side: THREE.DoubleSide,
-      depthWrite: false,
+      map: T.tallGrass, color: 0x7ecb4a, transparent: true,
+      alphaTest: 0.25, side: THREE.DoubleSide, depthWrite: false,
     });
     group.add(new THREE.Mesh(tgGeo,tgMat));
   }
@@ -869,14 +758,10 @@ function updateChunks(){
         const wasNew = !worldData.has(key);
         if(wasNew) generateChunk(cx,cz);
         if(!chunkMeshes.has(key)){
-          // MEJORA 7: Siempre rebuild al aparecer por primera vez
           rebuildChunk(cx,cz);
-          // Forzar rebuild de vecinos inmediatos para corregir caras faltantes
           if(wasNew){
-            rebuildChunk(cx-1,cz);
-            rebuildChunk(cx+1,cz);
-            rebuildChunk(cx,cz-1);
-            rebuildChunk(cx,cz+1);
+            rebuildChunk(cx-1,cz); rebuildChunk(cx+1,cz);
+            rebuildChunk(cx,cz-1); rebuildChunk(cx,cz+1);
           }
         }
       }
@@ -892,64 +777,271 @@ function updateChunks(){
 }
 
 // ══════════════════════════════════════════════════════════════
-//  MEJORA 2: MÚSICA AMBIENTAL ALEATORIA
+//  CICLO DÍA/NOCHE OPTIMIZADO
 // ══════════════════════════════════════════════════════════════
-const musicTracks = [
-  "musica/musica1.mp3",
-  "musica/musica2.mp3"
+// dayTime: 0.0 = medianoche, 0.25 = amanecer, 0.5 = mediodía, 0.75 = atardecer, 1.0 = medianoche
+const DAY_DURATION = 600; // segundos por ciclo completo (10 minutos)
+let dayTime = 0.25; // Empezar en amanecer
+
+// Colores de cielo por momento del día
+const SKY_COLORS = {
+  midnight:  new THREE.Color(0x03060f),
+  dawn:      new THREE.Color(0xff7033),
+  morning:   new THREE.Color(0x87CEEB),
+  noon:      new THREE.Color(0x5bb8f5),
+  afternoon: new THREE.Color(0x87CEEB),
+  dusk:      new THREE.Color(0xff5a1e),
+  night:     new THREE.Color(0x0a1128),
+};
+
+const FOG_COLORS = {
+  midnight:  new THREE.Color(0x03060f),
+  dawn:      new THREE.Color(0xd06030),
+  morning:   new THREE.Color(0x9ec8e8),
+  noon:      new THREE.Color(0x7ec8f0),
+  afternoon: new THREE.Color(0x9ec8e8),
+  dusk:      new THREE.Color(0xcc4a18),
+  night:     new THREE.Color(0x0a1128),
+};
+
+function getDayPhaseColors(t) {
+  // t: 0=midnight, 0.25=dawn, 0.5=noon, 0.75=dusk, 1=midnight
+  let skyColor, fogColor, ambientIntensity, sunIntensity, sunColor;
+
+  if (t < 0.2) {
+    // night → dawn  (t 0→0.2)
+    const f = t / 0.2;
+    const ef = smootherstep(f);
+    skyColor = SKY_COLORS.midnight.clone().lerp(SKY_COLORS.dawn, ef);
+    fogColor = FOG_COLORS.midnight.clone().lerp(FOG_COLORS.dawn, ef);
+    ambientIntensity = lerp(0.08, 0.45, ef);
+    sunIntensity = lerp(0.0, 0.55, ef);
+    sunColor = new THREE.Color(1.0, lerp(0.3, 0.6, ef), lerp(0.1, 0.2, ef));
+  } else if (t < 0.3) {
+    // dawn → morning (t 0.2→0.3)
+    const f = (t - 0.2) / 0.1;
+    const ef = smootherstep(f);
+    skyColor = SKY_COLORS.dawn.clone().lerp(SKY_COLORS.morning, ef);
+    fogColor = FOG_COLORS.dawn.clone().lerp(FOG_COLORS.morning, ef);
+    ambientIntensity = lerp(0.45, 0.70, ef);
+    sunIntensity = lerp(0.55, 0.90, ef);
+    sunColor = new THREE.Color(1.0, lerp(0.6, 0.9, ef), lerp(0.2, 0.75, ef));
+  } else if (t < 0.5) {
+    // morning → noon (t 0.3→0.5)
+    const f = (t - 0.3) / 0.2;
+    const ef = smootherstep(f);
+    skyColor = SKY_COLORS.morning.clone().lerp(SKY_COLORS.noon, ef);
+    fogColor = FOG_COLORS.morning.clone().lerp(FOG_COLORS.noon, ef);
+    ambientIntensity = lerp(0.70, 0.82, ef);
+    sunIntensity = lerp(0.90, 1.08, ef);
+    sunColor = new THREE.Color(1.0, lerp(0.9, 0.96, ef), lerp(0.75, 0.85, ef));
+  } else if (t < 0.7) {
+    // noon → afternoon (t 0.5→0.7)
+    const f = (t - 0.5) / 0.2;
+    const ef = smootherstep(f);
+    skyColor = SKY_COLORS.noon.clone().lerp(SKY_COLORS.afternoon, ef);
+    fogColor = FOG_COLORS.noon.clone().lerp(FOG_COLORS.afternoon, ef);
+    ambientIntensity = lerp(0.82, 0.70, ef);
+    sunIntensity = lerp(1.08, 0.85, ef);
+    sunColor = new THREE.Color(1.0, lerp(0.96, 0.88, ef), lerp(0.85, 0.65, ef));
+  } else if (t < 0.8) {
+    // afternoon → dusk (t 0.7→0.8)
+    const f = (t - 0.7) / 0.1;
+    const ef = smootherstep(f);
+    skyColor = SKY_COLORS.afternoon.clone().lerp(SKY_COLORS.dusk, ef);
+    fogColor = FOG_COLORS.afternoon.clone().lerp(FOG_COLORS.dusk, ef);
+    ambientIntensity = lerp(0.70, 0.38, ef);
+    sunIntensity = lerp(0.85, 0.45, ef);
+    sunColor = new THREE.Color(1.0, lerp(0.88, 0.5, ef), lerp(0.65, 0.15, ef));
+  } else if (t < 0.9) {
+    // dusk → night (t 0.8→0.9)
+    const f = (t - 0.8) / 0.1;
+    const ef = smootherstep(f);
+    skyColor = SKY_COLORS.dusk.clone().lerp(SKY_COLORS.night, ef);
+    fogColor = FOG_COLORS.dusk.clone().lerp(FOG_COLORS.night, ef);
+    ambientIntensity = lerp(0.38, 0.10, ef);
+    sunIntensity = lerp(0.45, 0.0, ef);
+    sunColor = new THREE.Color(1.0, lerp(0.5, 0.3, ef), lerp(0.15, 0.1, ef));
+  } else {
+    // night (t 0.9→1.0)
+    const f = (t - 0.9) / 0.1;
+    const ef = smootherstep(f);
+    skyColor = SKY_COLORS.night.clone().lerp(SKY_COLORS.midnight, ef);
+    fogColor = FOG_COLORS.night.clone().lerp(FOG_COLORS.midnight, ef);
+    ambientIntensity = lerp(0.10, 0.08, ef);
+    sunIntensity = 0.0;
+    sunColor = new THREE.Color(1.0, 0.3, 0.1);
+  }
+
+  return { skyColor, fogColor, ambientIntensity, sunIntensity, sunColor };
+}
+
+// ── Sol y Luna ──
+const SKY_BODY_DIST = 380; // distancia al origen para sol/luna
+const SKY_BODY_SIZE = 28;
+
+// Sol
+const sunGeo  = new THREE.PlaneGeometry(SKY_BODY_SIZE, SKY_BODY_SIZE);
+const sunMat  = new THREE.MeshBasicMaterial({
+  map: T.sun, transparent: true, alphaTest: 0.05,
+  depthWrite: false, side: THREE.DoubleSide
+});
+const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+scene.add(sunMesh);
+
+// Luna
+const moonGeo  = new THREE.PlaneGeometry(SKY_BODY_SIZE * 0.85, SKY_BODY_SIZE * 0.85);
+const moonMat  = new THREE.MeshBasicMaterial({
+  map: T.moon, transparent: true, alphaTest: 0.05,
+  depthWrite: false, side: THREE.DoubleSide
+});
+const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+scene.add(moonMesh);
+
+// Ángulo del sol: 0 rad = mediodía, PI = medianoche
+// dayTime 0.5 = mediodía → ángulo 0
+// dayTime 0.0 / 1.0 = medianoche → ángulo PI
+function updateSkyBodies() {
+  // Ángulo: mediodía (t=0.5) → arriba, medianoche (t=0) → abajo
+  const angle = (dayTime - 0.5) * Math.PI * 2;
+
+  const sunAngle  = angle;
+  const moonAngle = angle + Math.PI; // opuesto al sol
+
+  const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z;
+
+  // Sol: orbit en plano XY rotado sobre Z
+  sunMesh.position.set(
+    cx + Math.sin(sunAngle) * SKY_BODY_DIST,
+    cy + Math.cos(sunAngle) * SKY_BODY_DIST,
+    cz
+  );
+  sunMesh.lookAt(cx, cy, cz);
+
+  // Luna: opuesta al sol
+  moonMesh.position.set(
+    cx + Math.sin(moonAngle) * SKY_BODY_DIST,
+    cy + Math.cos(moonAngle) * SKY_BODY_DIST,
+    cz
+  );
+  moonMesh.lookAt(cx, cy, cz);
+
+  // Visibilidad: Sol visible en día (t 0.2–0.8), Luna en noche (t 0.8–1.0 y 0.0–0.2)
+  const dayFactor = Math.max(0, Math.min(1, (Math.cos((dayTime - 0.5) * Math.PI * 2) + 1) / 2));
+  sunMesh.material.opacity  = Math.max(0, Math.min(1, dayFactor * 2 - 0.2));
+  moonMesh.material.opacity = Math.max(0, Math.min(1, (1 - dayFactor) * 2 - 0.2));
+
+  // Dirección de la luz solar sigue el sol
+  sun.position.set(Math.sin(sunAngle), Math.cos(sunAngle), 0.3).normalize();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  NUBES — textura clouds.png en volumen multicapa 3D
+// ══════════════════════════════════════════════════════════════
+// clouds.png se usa como mapa de opacidad en múltiples planos superpuestos
+// dando sensación de volumen sin coste elevado
+
+const CLOUD_BASE_Y      = 215;   // altura base de nubes
+const CLOUD_LAYER_COUNT = 4;     // capas de profundidad
+const CLOUD_LAYER_SEP   = 5;     // separación vertical entre capas
+const CLOUD_SHEET_SIZE  = 1200;  // tamaño del plano de nubes en unidades de mundo
+const CLOUD_MOVE_SPEED  = 3.5;   // unidades por segundo en X
+
+// UVs desplazadas ligeramente por capa para dar volumen percibido
+const CLOUD_UV_OFFSETS = [
+  [0.00, 0.00],
+  [0.02, 0.01],
+  [0.04, 0.02],
+  [0.06, 0.03],
 ];
 
-let musicAudio = null;
-let musicTimeout = null;
-let musicEnabled = false; // Se activa solo tras interacción del usuario
+const cloudGroup = new THREE.Group();
+const cloudMeshes = [];
+
+// Preparar textura de nubes con wrapRepeat para movimiento infinito
+T.clouds.wrapS = THREE.RepeatWrapping;
+T.clouds.wrapT = THREE.RepeatWrapping;
+T.clouds.repeat.set(1, 1);
+
+for (let i = 0; i < CLOUD_LAYER_COUNT; i++) {
+  const geo = new THREE.PlaneGeometry(CLOUD_SHEET_SIZE, CLOUD_SHEET_SIZE);
+
+  // Clonar textura para UVs independientes por capa
+  const texClone = T.clouds.clone();
+  texClone.needsUpdate = true;
+  texClone.wrapS = THREE.RepeatWrapping;
+  texClone.wrapT = THREE.RepeatWrapping;
+  texClone.offset.set(CLOUD_UV_OFFSETS[i][0], CLOUD_UV_OFFSETS[i][1]);
+
+  const mat = new THREE.MeshBasicMaterial({
+    map: texClone,
+    transparent: true,
+    alphaTest: 0.05,
+    opacity: lerp(0.92, 0.55, i / (CLOUD_LAYER_COUNT - 1)), // capas superiores más tenues
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2; // plano horizontal
+  mesh.position.y = CLOUD_BASE_Y + i * CLOUD_LAYER_SEP;
+  cloudGroup.add(mesh);
+  cloudMeshes.push(mesh);
+}
+
+scene.add(cloudGroup);
+
+// Offset de desplazamiento UV acumulado — loop infinito sin saltos visuales
+let cloudUVOffset = 0;
+
+function updateClouds(dt) {
+  // Avanzar offset de UV en la dirección X (loop automático por RepeatWrapping)
+  cloudUVOffset += (CLOUD_MOVE_SPEED / CLOUD_SHEET_SIZE) * dt;
+  // Mantener en rango [0,1) para evitar drift numérico a largo plazo
+  if (cloudUVOffset >= 1.0) cloudUVOffset -= 1.0;
+
+  for (let i = 0; i < CLOUD_LAYER_COUNT; i++) {
+    const mesh = cloudMeshes[i];
+    // Mover el grupo con la cámara en X/Z para que las nubes siempre cubran la vista
+    mesh.position.x = camera.position.x;
+    mesh.position.z = camera.position.z;
+    // Desplazar offset UV con ligera variación por capa (profundidad de parallax)
+    const parallax = 1.0 - i * 0.08;
+    mesh.material.map.offset.x = cloudUVOffset * parallax + CLOUD_UV_OFFSETS[i][0];
+    mesh.material.map.offset.y = CLOUD_UV_OFFSETS[i][1];
+    mesh.material.map.needsUpdate = false; // offset no requiere needsUpdate en Three.js r128
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MÚSICA AMBIENTAL ALEATORIA
+// ══════════════════════════════════════════════════════════════
+const musicTracks = [
+  "musica/musica1.mp3","musica/musica2.mp3","musica/musica3.mp3","musica/musica4.mp3"
+];
+
+let musicAudio = null, musicTimeout = null, musicEnabled = false;
 
 function scheduleNextTrack() {
-  // Pausa entre 2 y 5 minutos (en ms)
-  const delay = (120 + Math.random() * 180) * 1000;
-  musicTimeout = setTimeout(() => {
-    playRandomTrack();
-  }, delay);
+  musicTimeout = setTimeout(() => { playRandomTrack(); }, 2000);
 }
 
 function playRandomTrack() {
   if (!musicEnabled) return;
-  // Seleccionar pista aleatoria
-  const trackIdx = Math.floor(Math.random() * musicTracks.length);
-  const trackPath = musicTracks[trackIdx];
-
-  if (musicAudio) {
-    musicAudio.pause();
-    musicAudio = null;
-  }
-
+  const trackPath = musicTracks[Math.floor(Math.random() * musicTracks.length)];
+  if (musicAudio) { musicAudio.pause(); musicAudio = null; }
   musicAudio = new Audio(trackPath);
-  // Volumen bajo: entre 0.2 y 0.35
-  musicAudio.volume = 0.2 + Math.random() * 0.15;
-
-  musicAudio.addEventListener('ended', () => {
-    // Al terminar, programar la siguiente con pausa
-    scheduleNextTrack();
-  });
-
-  musicAudio.addEventListener('error', () => {
-    // Si el archivo no existe, simplemente programar la siguiente
-    scheduleNextTrack();
-  });
-
-  musicAudio.play().catch(() => {
-    // Si no se puede reproducir (política del navegador), intentar más tarde
-    scheduleNextTrack();
-  });
+  musicAudio.volume = 0.4 + Math.random() * 0.15;
+  musicAudio.addEventListener('ended', () => scheduleNextTrack());
+  musicAudio.addEventListener('error', () => scheduleNextTrack());
+  musicAudio.play().catch(() => scheduleNextTrack());
 }
 
 function initMusic() {
   if (musicEnabled) return;
   musicEnabled = true;
-  // Empezar con una pausa inicial de 1-2 minutos
   const initialDelay = (60 + Math.random() * 60) * 1000;
-  musicTimeout = setTimeout(() => {
-    playRandomTrack();
-  }, initialDelay);
+  musicTimeout = setTimeout(() => { playRandomTrack(); }, initialDelay);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1005,15 +1097,6 @@ function renderInv(){
   });
 }
 
-// Nubes
-for(let i=0;i<50;i++){
-  const g=new THREE.BoxGeometry(10+Math.random()*28,1.3+Math.random()*1.2,7+Math.random()*18);
-  const m=new THREE.MeshLambertMaterial({color:0xffffff,transparent:true,opacity:0.88});
-  const c=new THREE.Mesh(g,m);
-  c.position.set((Math.random()-0.5)*1000, 490+Math.random()*20,(Math.random()-0.5)*1000);
-  scene.add(c);
-}
-
 document.getElementById('rdlbl').textContent='Chunks: '+RENDER_DIST;
 document.getElementById('rdinc').onclick=()=>{if(RENDER_DIST<20){RENDER_DIST++;document.getElementById('rdlbl').textContent='Chunks: '+RENDER_DIST;lastCX=9999;}};
 document.getElementById('rddec').onclick=()=>{if(RENDER_DIST>4){RENDER_DIST--;document.getElementById('rdlbl').textContent='Chunks: '+RENDER_DIST;lastCX=9999;}};
@@ -1036,12 +1119,8 @@ function findSafeSpawn(){
 // ══════════════════════════════════════════════════════════════
 //  PLAYER
 // ══════════════════════════════════════════════════════════════
-const PLAYER_HEIGHT = 1.62;
-const PLAYER_HALF_W = 0.29;
-const WALK_SPEED    = 4.3;
-const RUN_SPEED     = 9.0;
-const JUMP_FORCE    = 8.0;
-const GRAVITY_VAL   = -24;
+const PLAYER_HEIGHT = 1.62, PLAYER_HALF_W = 0.29;
+const WALK_SPEED = 4.3, RUN_SPEED = 9.0, JUMP_FORCE = 8.0, GRAVITY_VAL = -24;
 
 let velY=0, onGround=false, isRunning=false, spectatorMode=false;
 let flySpeed=14;
@@ -1079,11 +1158,7 @@ document.addEventListener('keydown', e=>{
 });
 document.addEventListener('keyup', e=>{ keys[e.code]=false; });
 
-blocker.addEventListener('click',()=>{
-  canvas.requestPointerLock();
-  // Iniciar música al primer click (interacción del usuario requerida)
-  initMusic();
-});
+blocker.addEventListener('click',()=>{ canvas.requestPointerLock(); initMusic(); });
 document.getElementById('invclose').addEventListener('click',()=>{ invpanel.style.display='none'; });
 
 document.addEventListener('pointerlockchange',()=>{
@@ -1144,7 +1219,8 @@ function castRay(){
 
 // Rotura de bloques
 const BLOCK_HARDNESS={
-  [GRASS]:2.0,[DIRT]:1.5,[STONE]:7.5,[WOOD]:4.0,[LEAVES]:0.8,[SAND]:1.5,[TALL_GRASS]:0.1,
+  [GRASS]:2.0,[DIRT]:1.5,[STONE]:7.5,[WOOD]:4.0,
+  [LEAVES]:0.8,[LEAVES_FLOWER]:0.8,[CHERRY_LEAVES]:0.8,[SAND]:1.5,[TALL_GRASS]:0.1,
 };
 let breakTarget=null,breakProgress=0,breakStage=-1,breakOverlayMesh=null;
 const BREAK_STAGES=10;
@@ -1192,9 +1268,7 @@ function updatePlayer(dt){
   camera.rotation.y+=yawDelta;
   camera.rotation.x=Math.max(-Math.PI/2+0.01,Math.min(Math.PI/2-0.01,camera.rotation.x+pitchDelta));
   yawDelta=0;pitchDelta=0;
-
   castRay();updateBreaking(dt);
-
   if(spectatorMode){
     const fwd=new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(0,camera.rotation.y,0));
     const right=new THREE.Vector3(1,0,0).applyEuler(new THREE.Euler(0,camera.rotation.y,0));
@@ -1209,7 +1283,6 @@ function updatePlayer(dt){
     camera.position.addScaledVector(move,flySpeed*dt);
     return;
   }
-
   isRunning=keys['ShiftLeft'];
   const speed=isRunning?RUN_SPEED:WALK_SPEED;
   const fwd=new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(0,camera.rotation.y,0));
@@ -1242,7 +1315,6 @@ function updatePlayer(dt){
 (function init(){
   const sp=findSafeSpawn();
   camera.position.set(sp.x,sp.y,sp.z);
-
   const pcx=Math.floor(sp.x/CHUNK_SIZE),pcz=Math.floor(sp.z/CHUNK_SIZE);
   for(let dx=-RENDER_DIST;dx<=RENDER_DIST;dx++){
     for(let dz=-RENDER_DIST;dz<=RENDER_DIST;dz++){
@@ -1261,6 +1333,9 @@ function updatePlayer(dt){
 //  LOOP
 // ══════════════════════════════════════════════════════════════
 let frame=0, lastTime=performance.now();
+// Throttle para actualización de cielo (cada 3 frames para ahorrar cálculos)
+let skyUpdateAccum = 0;
+const SKY_UPDATE_INTERVAL = 3;
 
 function animate(){
   requestAnimationFrame(animate);
@@ -1268,8 +1343,29 @@ function animate(){
   const dt=Math.min((now-lastTime)/1000, 0.05);
   lastTime=now; frame++;
 
+  // Avanzar tiempo de día
+  dayTime += dt / DAY_DURATION;
+  if (dayTime >= 1.0) dayTime -= 1.0;
+
   updatePlayer(dt);
-  if(frame%10===0)updateChunks();
+  updateClouds(dt);
+
+  // Cielo y luces — actualizar cada SKY_UPDATE_INTERVAL frames (optimizado)
+  skyUpdateAccum++;
+  if (skyUpdateAccum >= SKY_UPDATE_INTERVAL) {
+    skyUpdateAccum = 0;
+    const { skyColor, fogColor, ambientIntensity, sunIntensity, sunColor } = getDayPhaseColors(dayTime);
+    scene.background = skyColor;
+    scene.fog.color.copy(fogColor);
+    ambientLight.intensity = ambientIntensity;
+    sun.intensity = sunIntensity;
+    sun.color.copy(sunColor);
+  }
+
+  // Sol y luna siguen cámara — actualizar cada frame (barato)
+  updateSkyBodies();
+
+  if(frame%10===0) updateChunks();
   renderer.render(scene,camera);
 
   if(frame%20===0){
@@ -1278,11 +1374,15 @@ function animate(){
     const cont=getContinentalness(bx,bz);
     const surfH=getSurface(bx,bz);
     const splineH=Math.round(evalSpline(cont));
+    // Convertir dayTime a hora visual
+    const hour = Math.floor(((dayTime + 0.25) % 1.0) * 24);
+    const min  = Math.floor((((dayTime + 0.25) % 1.0) * 24 % 1) * 60);
+    const timeStr = String(hour).padStart(2,'0') + ':' + String(min).padStart(2,'0');
     hud.innerHTML=
       `Pos: ${camera.position.x.toFixed(1)}, ${bwY}, ${camera.position.z.toFixed(1)}<br>`+
       `Sup: Y${surfH} | Spline: ${splineH} | C: ${cont.toFixed(3)}<br>`+
       `Terreno: ${getTerrainName(cont)}<br>`+
-      `Chunks: ${chunkMeshes.size} | Tris: ${info.render.triangles.toLocaleString()}`;
+      `Hora: ${timeStr} | Chunks: ${chunkMeshes.size} | Tris: ${info.render.triangles.toLocaleString()}`;
   }
 }
 animate();
