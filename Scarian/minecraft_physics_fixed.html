@@ -17,8 +17,6 @@ body{background:#000;overflow:hidden}
 .hcount{position:absolute;bottom:2px;right:4px;font-size:10px;color:#fff;text-shadow:1px 1px 2px #000}
 #selblock{position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.55);color:#fff;font-size:11px;padding:6px 10px;border-radius:4px;pointer-events:none}
 #msg{position:absolute;top:50%;left:50%;transform:translate(-50%,calc(-50% + 70px));background:rgba(0,0,0,0.65);color:#fff;font-size:12px;padding:4px 12px;border-radius:4px;pointer-events:none;opacity:0;transition:opacity 0.3s}
-#wateroverlay{position:absolute;inset:0;background:rgba(20,80,200,0.35);pointer-events:none;display:none}
-#snowoverlay{position:absolute;inset:0;background:rgba(200,220,255,0.18);pointer-events:none;display:none}
 #invpanel{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(18,18,18,0.97);border:1px solid #555;border-radius:6px;padding:16px;display:none;z-index:20;min-width:340px}
 #invpanel h3{color:#fff;font-size:13px;margin-bottom:10px;text-align:center;letter-spacing:1px}
 #invgrid{display:grid;grid-template-columns:repeat(9,40px);gap:4px;justify-content:center}
@@ -35,14 +33,11 @@ body{background:#000;overflow:hidden}
 #rdctl{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:11px;padding:5px 10px;border-radius:4px;display:flex;align-items:center;gap:6px;user-select:none}
 #rdctl button{background:rgba(255,255,255,0.12);border:1px solid #666;color:#fff;width:22px;height:22px;border-radius:3px;cursor:pointer;font-size:14px;line-height:1}
 #rdctl button:hover{background:rgba(255,255,255,0.28)}
-#loadbar{position:absolute;bottom:0;left:0;height:3px;background:#4af;width:0%;transition:width 0.2s;pointer-events:none;z-index:30}
 </style>
 </head>
 <body>
 <div id="wrap">
   <canvas id="c"></canvas>
-  <div id="wateroverlay"></div>
-  <div id="snowoverlay"></div>
   <div id="hud">...</div>
   <div id="cross">+</div>
   <div id="hotbar"></div>
@@ -55,7 +50,8 @@ body{background:#000;overflow:hidden}
   </div>
   <div id="blocker"><div>SCARIAN<br>
     <span>Click para jugar · WASD mover · Espacio saltar · Shift correr<br>
-    Mantén Click izq romper · Click der colocar · E inventario · Scroll cambiar bloque<br><br></span>
+    Mantén Click izq romper · Click der colocar · E inventario · Scroll cambiar bloque<br>
+    F = modo espectador · R = cambiar velocidad vuelo<br></span>
   </div></div>
   <div id="seedinfo">Semilla: cargando...</div>
   <div id="rdctl">
@@ -63,56 +59,44 @@ body{background:#000;overflow:hidden}
     <span id="rdlbl">Chunks: 8</span>
     <button id="rdinc">+</button>
   </div>
-  <div id="loadbar"></div>
 </div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 'use strict';
 
 // ══════════════════════════════════════════════════════════════
-//  CONFIGURACIÓN GLOBAL
+//  CONFIG
 // ══════════════════════════════════════════════════════════════
 const WORLD_SEED   = Math.floor(Math.random() * 2147483647);
 document.getElementById('seedinfo').textContent = 'Semilla: ' + WORLD_SEED;
 
 const CHUNK_SIZE   = 16;
-const CHUNK_HEIGHT = 128;
-const SEA_LEVEL    = 52;
+const CHUNK_HEIGHT = 280; // Aumentado para super montañas (hasta 260)
 
-const canvas       = document.getElementById('c');
-const wrap         = document.getElementById('wrap');
-const blocker      = document.getElementById('blocker');
-const hud          = document.getElementById('hud');
+const canvas  = document.getElementById('c');
+const wrap    = document.getElementById('wrap');
+const blocker = document.getElementById('blocker');
+const hud     = document.getElementById('hud');
 const hotbarEl     = document.getElementById('hotbar');
 const selblockEl   = document.getElementById('selblock');
 const invpanel     = document.getElementById('invpanel');
 const invgrid      = document.getElementById('invgrid');
 const msgEl        = document.getElementById('msg');
-const waterOverlay = document.getElementById('wateroverlay');
-const snowOverlay  = document.getElementById('snowoverlay');
-const loadBar      = document.getElementById('loadbar');
-window.waterOverlay = waterOverlay;
-window.snowOverlay  = snowOverlay;
-const lavOverlay   = { style:{display:'none'} };
-window.lavOverlay  = lavOverlay;
 
 // ══════════════════════════════════════════════════════════════
-//  RENDERER & SCENE
+//  RENDERER
 // ══════════════════════════════════════════════════════════════
 const renderer = new THREE.WebGLRenderer({canvas, antialias:false, powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.sortObjects = false;
 
-const _frustum    = new THREE.Frustum();
-const _frustumMat = new THREE.Matrix4();
-const _chunkSphere= new THREE.Sphere();
-
 const scene  = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
-scene.fog = new THREE.FogExp2(0x9ec8e8, 0.005);
-const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 320);
+scene.fog = new THREE.FogExp2(0x9ec8e8, 0.003);
+const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 500);
 camera.rotation.order = 'YXZ';
-scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+scene.add(new THREE.AmbientLight(0xffffff, 0.78));
 const sun = new THREE.DirectionalLight(0xfff0cc, 1.05);
 sun.position.set(0.6,1,0.4).normalize(); scene.add(sun);
 
@@ -123,283 +107,260 @@ function resize(){
 resize(); window.addEventListener('resize',resize);
 
 // ══════════════════════════════════════════════════════════════
-//  NOISE (usado solo para getBiome/getSurface en hilo principal)
+//  NOISE — Perlin mejorado
 // ══════════════════════════════════════════════════════════════
-function hash2(x, z, seed) {
-  let h = ((x * 1619 + z * 31337 + seed * 1013904223) | 0);
-  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
-  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
-  return (h ^ (h >>> 16)) >>> 0;
+function hash2(x,z,seed){
+  let h=((x*1619+z*31337+seed*1013904223)|0);
+  h=Math.imul(h^(h>>>16),0x45d9f3b);
+  h=Math.imul(h^(h>>>16),0x45d9f3b);
+  return(h^(h>>>16))>>>0;
 }
-function hash3(x, y, z, seed) {
-  let h = ((x * 1619 + y * 28657 + z * 31337 + seed * 1013904223) | 0);
-  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
-  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
-  return (h ^ (h >>> 16)) >>> 0;
+function hash3(x,y,z,seed){
+  let h=((x*1619+y*7919+z*31337+seed*1013904223)|0);
+  h=Math.imul(h^(h>>>16),0x45d9f3b);
+  h=Math.imul(h^(h>>>16),0x45d9f3b);
+  return(h^(h>>>16))>>>0;
 }
-function smoothstep(t) { return t * t * (3 - 2 * t); }
-function lerp(a, b, t) { return a + (b - a) * t; }
-function grad2(h, x, z) {
-  const v = h & 3;
-  return v === 0 ? x + z : v === 1 ? -x + z : v === 2 ? x - z : -x - z;
+function smootherstep(t){return t*t*t*(t*(t*6-15)+10);}
+function lerp(a,b,t){return a+(b-a)*t;}
+function grad2(h,x,z){const v=h&3;return v===0?x+z:v===1?-x+z:v===2?x-z:-x-z;}
+function grad3(h,x,y,z){
+  const u=h<8?x:y, v=h<4?y:h===12||h===14?x:z;
+  return((h&1)?-u:u)+((h&2)?-v:v);
 }
-function perlin2(x, z, seed) {
-  const xi = Math.floor(x)|0, zi = Math.floor(z)|0;
-  const xf = x - xi, zf = z - zi;
-  const u = smoothstep(xf), v = smoothstep(zf);
-  const h00 = hash2(xi,   zi,   seed) & 255;
-  const h10 = hash2(xi+1, zi,   seed) & 255;
-  const h01 = hash2(xi,   zi+1, seed) & 255;
-  const h11 = hash2(xi+1, zi+1, seed) & 255;
+
+function perlin2(x,z,seed){
+  const xi=Math.floor(x)|0,zi=Math.floor(z)|0;
+  const xf=x-xi,zf=z-zi;
+  const u=smootherstep(xf),v=smootherstep(zf);
+  const h00=hash2(xi,zi,seed)&255,h10=hash2(xi+1,zi,seed)&255;
+  const h01=hash2(xi,zi+1,seed)&255,h11=hash2(xi+1,zi+1,seed)&255;
+  return lerp(lerp(grad2(h00,xf,zf),grad2(h10,xf-1,zf),u),lerp(grad2(h01,xf,zf-1),grad2(h11,xf-1,zf-1),u),v);
+}
+
+function perlin3(x,y,z,seed){
+  const xi=Math.floor(x)|0,yi=Math.floor(y)|0,zi=Math.floor(z)|0;
+  const xf=x-xi,yf=y-yi,zf=z-zi;
+  const u=smootherstep(xf),v=smootherstep(yf),w=smootherstep(zf);
+  const aaa=hash3(xi,yi,zi,seed)&15, baa=hash3(xi+1,yi,zi,seed)&15;
+  const aba=hash3(xi,yi+1,zi,seed)&15, bba=hash3(xi+1,yi+1,zi,seed)&15;
+  const aab=hash3(xi,yi,zi+1,seed)&15, bab=hash3(xi+1,yi,zi+1,seed)&15;
+  const abb=hash3(xi,yi+1,zi+1,seed)&15, bbb=hash3(xi+1,yi+1,zi+1,seed)&15;
   return lerp(
-    lerp(grad2(h00, xf,   zf  ), grad2(h10, xf-1, zf  ), u),
-    lerp(grad2(h01, xf,   zf-1), grad2(h11, xf-1, zf-1), u),
-    v
+    lerp(lerp(grad3(aaa,xf,yf,zf),grad3(baa,xf-1,yf,zf),u),lerp(grad3(aba,xf,yf-1,zf),grad3(bba,xf-1,yf-1,zf),u),v),
+    lerp(lerp(grad3(aab,xf,yf,zf-1),grad3(bab,xf-1,yf,zf-1),u),lerp(grad3(abb,xf,yf-1,zf-1),grad3(bbb,xf-1,yf-1,zf-1),u),v),
+    w
   );
 }
-function fbm2(x, z, octs, sc, seed) {
-  let v=0, a=1, f=1, mx=0;
-  for(let i=0; i<octs; i++) {
-    v += perlin2(x*f/sc, z*f/sc, seed+i*997) * a;
-    mx += a; a *= 0.5; f *= 2;
-  }
-  return v / mx;
+
+// fBm estándar
+function fbm(x,z,octs,sc,seed,lacunarity=2.0,gain=0.5){
+  let v=0,a=1,f=1,mx=0;
+  for(let i=0;i<octs;i++){v+=perlin2(x*f/sc,z*f/sc,seed+i*997)*a;mx+=a;a*=gain;f*=lacunarity;}
+  return v/mx;
 }
-function ridgedFbm(x, z, octs, sc, seed) {
-  let v=0, a=1, f=1, mx=0, prev=1;
-  for(let i=0; i<octs; i++) {
-    let n = Math.abs(perlin2(x*f/sc, z*f/sc, seed+i*997));
-    n = 1 - n; n = n * n * prev; prev = n;
-    v += n * a; mx += a; a *= 0.5; f *= 2;
+
+// Ridged multifractal para crestas de montaña
+function ridgedFbm(x,z,octs,sc,seed,lacunarity=2.0,gain=0.6){
+  let v=0,a=1,f=1,mx=0,prev=1;
+  for(let i=0;i<octs;i++){
+    let n=Math.abs(perlin2(x*f/sc,z*f/sc,seed+i*997));
+    n=1-n; n=n*n*prev; prev=n;
+    v+=n*a; mx+=a; a*=gain; f*=lacunarity;
   }
-  return v / mx;
+  return v/mx;
 }
 
 // ══════════════════════════════════════════════════════════════
-//  TEXTURAS
+//  SPLINE CONTINENTALNESS → ALTURA
+//  Tabla exacta según especificación
 // ══════════════════════════════════════════════════════════════
-function rnd(n){ return Math.random()*n|0; }
-function makeTex(fn){
-  const c=document.createElement('canvas'); c.width=c.height=16;
-  const ctx=c.getContext('2d'); fn(ctx);
-  const t=new THREE.CanvasTexture(c);
-  t.magFilter=t.minFilter=THREE.NearestFilter; t.generateMipmaps=false; return t;
+
+// Puntos de control: [continentalness, targetHeight]
+const SPLINE_POINTS = [
+  [-1.00, 45],
+  [-0.80, 50],
+  [-0.60, 58],
+  [-0.40, 68],
+  [-0.20, 80],
+  [ 0.00, 95],
+  [ 0.15, 110],
+  [ 0.30, 125],
+  [ 0.40, 145],
+  [ 0.50, 165],
+  [ 0.65, 185],
+  [ 0.80, 210],
+  [ 0.90, 235],
+  [ 1.00, 260],
+];
+
+// Interpolación Catmull-Rom para spline suave entre puntos
+function catmullRom(p0, p1, p2, p3, t) {
+  const t2 = t * t, t3 = t2 * t;
+  return 0.5 * (
+    (2*p1) +
+    (-p0 + p2) * t +
+    (2*p0 - 5*p1 + 4*p2 - p3) * t2 +
+    (-p0 + 3*p1 - 3*p2 + p3) * t3
+  );
 }
 
-const T={
-  grassTop: makeTex(ctx=>{
-    ctx.fillStyle='#5a9e2f';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#4e8a28';for(let i=0;i<20;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
-    ctx.fillStyle='#6ab535';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
-  }),
-  grassSide: makeTex(ctx=>{
-    ctx.fillStyle='#8B6914';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#7a5c10';for(let i=0;i<15;i++)ctx.fillRect(rnd(16),3+rnd(12),1,1);
-    ctx.fillStyle='#5a9e2f';ctx.fillRect(0,0,16,3);ctx.fillStyle='#4e8a28';ctx.fillRect(0,0,16,1);
-  }),
-  dirt: makeTex(ctx=>{
-    ctx.fillStyle='#8B6914';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#7a5c10';for(let i=0;i<22;i++)ctx.fillRect(rnd(16),rnd(16),1+rnd(2),1);
-    ctx.fillStyle='#9a7520';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
-  }),
-  stone: makeTex(ctx=>{
-    ctx.fillStyle='#888';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#777';for(let i=0;i<5;i++)ctx.fillRect(rnd(12),rnd(12),3+rnd(3),3+rnd(3));
-    ctx.fillStyle='#999';for(let i=0;i<6;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
-  }),
-  wood: makeTex(ctx=>{
-    ctx.fillStyle='#6B4226';ctx.fillRect(0,0,16,16);
-    for(let i=0;i<16;i++){ctx.fillStyle=i%2?'#5a3820':'#7d4e30';ctx.fillRect(0,i,16,1);}
-    ctx.fillStyle='#7d5030';for(let i=0;i<3;i++)ctx.fillRect(rnd(14),rnd(14),2,4);
-  }),
-  woodTop: makeTex(ctx=>{
-    ctx.fillStyle='#5a3010';ctx.fillRect(0,0,16,16);
-    ctx.strokeStyle='#6d4020';ctx.lineWidth=1;
-    for(let r=2;r<8;r+=2){ctx.beginPath();ctx.arc(8,8,r,0,Math.PI*2);ctx.stroke();}
-    ctx.fillStyle='#7d5030';for(let i=0;i<4;i++)ctx.fillRect(rnd(12)+2,rnd(12)+2,2,2);
-  }),
-  leaves: makeTex(ctx=>{
-    ctx.fillStyle='#1e8b1e';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#166016';for(let i=0;i<14;i++)ctx.fillRect(rnd(16),rnd(16),2,2);
-    ctx.fillStyle='#28aa28';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,2);
-  }),
-  sand: makeTex(ctx=>{
-    ctx.fillStyle='#ddc67e';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#c8b468';for(let i=0;i<22;i++)ctx.fillRect(rnd(16),rnd(16),1+rnd(2),1);
-    ctx.fillStyle='#ead488';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
-  }),
-  water: makeTex(ctx=>{
-    for(let y=0;y<16;y++)for(let x=0;x<16;x++){
-      const w=Math.sin(x*0.8+y*0.5)*0.5+0.5;
-      ctx.fillStyle=`rgb(${Math.floor(20+w*10)},${Math.floor(60+w*20)},${Math.floor(180+w*30)})`;
-      ctx.fillRect(x,y,1,1);
-    }
-    ctx.fillStyle='rgba(100,160,255,0.35)';
-    for(let i=0;i<6;i++)ctx.fillRect((i*3)%16,(i*5)%16,3,1);
-  }),
-  snow: makeTex(ctx=>{
-    ctx.fillStyle='#eef2ff';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#dde4f8';for(let i=0;i<18;i++)ctx.fillRect(rnd(16),rnd(16),2,1);
-    ctx.fillStyle='#ffffff';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
-  }),
-  snowStone: makeTex(ctx=>{
-    ctx.fillStyle='#aab4c8';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#8898b0';for(let i=0;i<10;i++)ctx.fillRect(rnd(14),rnd(14),2+rnd(2),2);
-    ctx.fillStyle='#d0daea';for(let i=0;i<6;i++)ctx.fillRect(rnd(16),rnd(16),2,1);
-  }),
-  gravel: makeTex(ctx=>{
-    ctx.fillStyle='#888080';ctx.fillRect(0,0,16,16);
-    for(let i=0;i<20;i++){const s=1+rnd(3);ctx.fillStyle=`hsl(0,0%,${40+rnd(30)}%)`;ctx.fillRect(rnd(14),rnd(14),s,s);}
-  }),
-  redDirt: makeTex(ctx=>{
-    ctx.fillStyle='#b84a18';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#a03a10';for(let i=0;i<22;i++)ctx.fillRect(rnd(16),rnd(16),1+rnd(2),1);
-    ctx.fillStyle='#cc5520';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
-  }),
-  dryGrassTop: makeTex(ctx=>{
-    ctx.fillStyle='#7a9e20';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#6a8818';for(let i=0;i<20;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
-    ctx.fillStyle='#96b830';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
-  }),
-  dryGrassSide: makeTex(ctx=>{
-    ctx.fillStyle='#b84a18';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#a03a10';for(let i=0;i<15;i++)ctx.fillRect(rnd(16),3+rnd(12),1,1);
-    ctx.fillStyle='#7a9e20';ctx.fillRect(0,0,16,3);
-  }),
-  tropLeaves: makeTex(ctx=>{
-    ctx.fillStyle='#0e7a14';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#086010';for(let i=0;i<16;i++)ctx.fillRect(rnd(16),rnd(16),2,2);
-    ctx.fillStyle='#18b020';for(let i=0;i<10;i++)ctx.fillRect(rnd(16),rnd(16),1,2);
-    ctx.fillStyle='#eedd00';for(let i=0;i<3;i++)ctx.fillRect(rnd(14),rnd(14),2,2);
-  }),
-  tropWood: makeTex(ctx=>{
-    ctx.fillStyle='#4a3218';ctx.fillRect(0,0,16,16);
-    for(let i=0;i<16;i++){ctx.fillStyle=i%2?'#3a2810':'#5a3a20';ctx.fillRect(0,i,16,1);}
-    ctx.fillStyle='#6a4825';for(let i=0;i<4;i++)ctx.fillRect(rnd(14),rnd(14),2,5);
-  }),
-  cloudLeaves: makeTex(ctx=>{
-    ctx.fillStyle='#3a8870';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#2a6858';for(let i=0;i<14;i++)ctx.fillRect(rnd(16),rnd(16),2,2);
-    ctx.fillStyle='#4aaa88';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,2);
-    ctx.fillStyle='rgba(220,240,255,0.35)';ctx.fillRect(0,0,16,16);
-  }),
-  mudDirt: makeTex(ctx=>{
-    ctx.fillStyle='#3a2810';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#2a1808';for(let i=0;i<22;i++)ctx.fillRect(rnd(16),rnd(16),1+rnd(2),1);
-    ctx.fillStyle='#4a3218';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
-    ctx.fillStyle='rgba(60,100,80,0.3)';for(let i=0;i<5;i++)ctx.fillRect(rnd(14),rnd(14),2,1);
-  }),
-  mangroveLeaves: makeTex(ctx=>{
-    ctx.fillStyle='#126628';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#0a4a1a';for(let i=0;i<14;i++)ctx.fillRect(rnd(16),rnd(16),2,2);
-    ctx.fillStyle='#1c8836';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,2);
-  }),
-  swampWater: makeTex(ctx=>{
-    for(let y=0;y<16;y++)for(let x=0;x<16;x++){
-      const w=Math.sin(x*0.8+y*0.5)*0.5+0.5;
-      ctx.fillStyle=`rgb(${Math.floor(20+w*10)},${Math.floor(60+w*20)},${Math.floor(40+w*20)})`;
-      ctx.fillRect(x,y,1,1);
-    }
-  }),
-  savannaTop: makeTex(ctx=>{
-    ctx.fillStyle='#a8b840';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#908a28';for(let i=0;i<20;i++)ctx.fillRect(rnd(16),rnd(16),1,2);
-    ctx.fillStyle='#c8d850';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
-  }),
-  savannaSide: makeTex(ctx=>{
-    ctx.fillStyle='#c87040';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#b05a30';for(let i=0;i<15;i++)ctx.fillRect(rnd(16),3+rnd(12),1,1);
-    ctx.fillStyle='#a8b840';ctx.fillRect(0,0,16,3);
-  }),
-  acaciaWood: makeTex(ctx=>{
-    ctx.fillStyle='#b88040';ctx.fillRect(0,0,16,16);
-    for(let i=0;i<16;i++){ctx.fillStyle=i%2?'#a06a30':'#c89050';ctx.fillRect(0,i,16,1);}
-  }),
-  acaciaTop: makeTex(ctx=>{
-    ctx.fillStyle='#a06030';ctx.fillRect(0,0,16,16);
-    ctx.strokeStyle='#b87040';ctx.lineWidth=1;
-    for(let r=2;r<8;r+=2){ctx.beginPath();ctx.arc(8,8,r,0,Math.PI*2);ctx.stroke();}
-  }),
-  acaciaLeaves: makeTex(ctx=>{
-    ctx.fillStyle='#6a9a18';ctx.fillRect(0,0,16,16);
-    ctx.fillStyle='#508010';for(let i=0;i<14;i++)ctx.fillRect(rnd(16),rnd(16),2,2);
-    ctx.fillStyle='#88b828';for(let i=0;i<8;i++)ctx.fillRect(rnd(16),rnd(16),1,1);
-  }),
-};
+// Evalúa el spline dado un valor de continentalness [-1, 1]
+function evalSpline(cont) {
+  const pts = SPLINE_POINTS;
+  const n = pts.length;
+
+  // Clamp
+  if (cont <= pts[0][0]) return pts[0][1];
+  if (cont >= pts[n-1][0]) return pts[n-1][1];
+
+  // Encontrar segmento
+  let seg = 0;
+  for (let i = 0; i < n - 1; i++) {
+    if (cont >= pts[i][0] && cont <= pts[i+1][0]) { seg = i; break; }
+  }
+
+  // t local en el segmento [0,1]
+  const t = (cont - pts[seg][0]) / (pts[seg+1][0] - pts[seg][0]);
+
+  // Índices con clamp para Catmull-Rom (necesita p-1 y p+2)
+  const i0 = Math.max(0, seg - 1);
+  const i1 = seg;
+  const i2 = Math.min(n - 1, seg + 1);
+  const i3 = Math.min(n - 1, seg + 2);
+
+  return catmullRom(pts[i0][1], pts[i1][1], pts[i2][1], pts[i3][1], t);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RUIDOS DE TERRENO
+// ══════════════════════════════════════════════════════════════
+
+// continentalnessNoise: oct=5, freq=0.003 → escala=333, persist=0.5, lac=2.0
+function getContinentalness(wx, wz) {
+  return fbm(wx, wz, 5, 333, WORLD_SEED + 1000, 2.0, 0.5);
+}
+
+// detailNoise: oct=3, freq=0.02 → escala=50, persist=0.4
+function getDetailNoise(wx, wz) {
+  return fbm(wx, wz, 3, 50, WORLD_SEED + 2000, 2.0, 0.4);
+}
+
+// mountainNoise: oct=4, freq=0.002 → escala=500, persist=0.6
+function getMountainNoise(wx, wz) {
+  return ridgedFbm(wx, wz, 4, 500, WORLD_SEED + 3000, 2.0, 0.6);
+}
+
+// ── SUPERFICIE FINAL ──
+// Usa la tabla de spline + detalle
+const _surfCache = new Map();
+
+function getSurface(wx, wz) {
+  const k = wx + '|' + wz;
+  if (_surfCache.has(k)) return _surfCache.get(k);
+  const h = _calcSurface(wx, wz);
+  _surfCache.set(k, h);
+  if (_surfCache.size > 300000) _surfCache.clear();
+  return h;
+}
+
+function _calcSurface(wx, wz) {
+  // 1. Continentalness → altura base via spline
+  const cont = getContinentalness(wx, wz);
+  const heightBase = evalSpline(cont);
+
+  // 2. Detail noise: amplitud proporcional a la altura para más detalle en montañas
+  const detail = getDetailNoise(wx, wz);
+  const detailAmp = lerp(4, 18, Math.max(0, (heightBase - 45) / 215));
+  const heightDetail = detail * detailAmp;
+
+  // 3. Mountain noise: añade crestas dramáticas en zonas altas
+  const mNoise = getMountainNoise(wx, wz);
+  // Solo aplica mountainNoise significativamente en zonas altas (cont > 0.4)
+  const mBlend = Math.max(0, (cont - 0.3) / 0.7); // 0 en planicie, 1 en super montaña
+  const mountainAmp = mBlend * mBlend * 35;
+  const heightMountain = mNoise * mountainAmp;
+
+  // 4. Micro-detalle de rugosidad
+  const micro = fbm(wx, wz, 3, 12, WORLD_SEED + 8000, 2.0, 0.5) * lerp(0.5, 3.0, mBlend);
+
+  const total = heightBase + heightDetail + heightMountain + micro;
+  return Math.round(Math.max(8, Math.min(CHUNK_HEIGHT - 8, total)));
+}
+
+// Nombre del terreno según continentalness
+function getTerrainName(cont) {
+  if (cont < -0.6) return 'Valle Profundo';
+  if (cont < -0.3) return 'Llanura Baja';
+  if (cont < 0.0)  return 'Llanura';
+  if (cont < 0.15) return 'Colinas Suaves';
+  if (cont < 0.30) return 'Colinas Altas';
+  if (cont < 0.40) return 'Pre-Montaña';
+  if (cont < 0.55) return 'Montañas';
+  if (cont < 0.70) return 'Montañas Altas';
+  if (cont < 0.85) return 'Montañas Muy Altas';
+  return 'Super Montañas';
+}
 
 // ══════════════════════════════════════════════════════════════
 //  BLOCK IDs
 // ══════════════════════════════════════════════════════════════
-const AIR=0,GRASS=1,DIRT=2,STONE=3,WOOD=4,LEAVES=5,SAND=6,SNOW=7,WATER=8,
-      SNOW_STONE=9,GRAVEL=10,
-      RED_DIRT=11,DRY_GRASS=12,TROP_WOOD=13,TROP_LEAVES=14,
-      CLOUD_LEAVES=15,MUD_DIRT=16,MANGROVE_LEAVES=17,SWAMP_WATER=18,
-      ACACIA_WOOD=19,SAVANNA_GRASS=20,ACACIA_LEAVES=21;
+const AIR=0, GRASS=1, DIRT=2, STONE=3, WOOD=4, LEAVES=5, SAND=6, TALL_GRASS=7;
 
 const BLOCK_NAMES={
-  [GRASS]:'Grass',[DIRT]:'Tierra',[STONE]:'Piedra',[WOOD]:'Madera',
-  [LEAVES]:'Hojas',[SAND]:'Arena',[SNOW]:'Nieve',[WATER]:'Agua',
-  [SNOW_STONE]:'Roca Nevada',[GRAVEL]:'Grava',
-  [RED_DIRT]:'Tierra Roja',[DRY_GRASS]:'Pasto Seco',[TROP_WOOD]:'Tronco Tropical',
-  [TROP_LEAVES]:'Hojas Tropicales',[CLOUD_LEAVES]:'Hojas Nubladas',
-  [MUD_DIRT]:'Barro',[MANGROVE_LEAVES]:'Hojas Manglar',[SWAMP_WATER]:'Agua Pantanosa',
-  [ACACIA_WOOD]:'Acacia',[SAVANNA_GRASS]:'Pasto Sabana',[ACACIA_LEAVES]:'Hojas Acacia',
+  [GRASS]:'Grass',[DIRT]:'Tierra',[STONE]:'Piedra',
+  [WOOD]:'Madera',[LEAVES]:'Hojas',[SAND]:'Arena',[TALL_GRASS]:'Cesped',
+};
+
+// ══════════════════════════════════════════════════════════════
+//  TEXTURAS
+// ══════════════════════════════════════════════════════════════
+const loader = new THREE.TextureLoader();
+function loadTex(path){
+  const t=loader.load(path);
+  t.magFilter=THREE.NearestFilter;
+  t.minFilter=THREE.NearestFilter;
+  t.generateMipmaps=false;
+  return t;
+}
+
+const T = {
+  grassTop:  loadTex("textures/grass_block_top.png"),
+  grassSide: loadTex("textures/grass_block_side.png"),
+  dirt:      loadTex("textures/dirt.png"),
+  stone:     loadTex("textures/stone.png"),
+  sand:      loadTex("textures/sand.png"),
+  wood:      loadTex("textures/dark_oak_log.png"),
+  woodTop:   loadTex("textures/dark_oak_log_top.png"),
+  leaves:    loadTex("textures/azalea_leaves.png"),
+  tallGrass: loadTex("textures/tall_grass_top.png"),
 };
 
 const BLOCK_FACES={
-  [GRASS]:      [T.grassSide,T.grassSide,T.grassTop,T.dirt,T.grassSide,T.grassSide],
-  [DIRT]:       [T.dirt,T.dirt,T.dirt,T.dirt,T.dirt,T.dirt],
-  [STONE]:      [T.stone,T.stone,T.stone,T.stone,T.stone,T.stone],
-  [WOOD]:       [T.wood,T.wood,T.woodTop,T.woodTop,T.wood,T.wood],
-  [LEAVES]:     [T.leaves,T.leaves,T.leaves,T.leaves,T.leaves,T.leaves],
-  [SAND]:       [T.sand,T.sand,T.sand,T.sand,T.sand,T.sand],
-  [SNOW]:       [T.snow,T.snow,T.snow,T.snow,T.snow,T.snow],
-  [WATER]:      [T.water,T.water,T.water,T.water,T.water,T.water],
-  [SNOW_STONE]: [T.snowStone,T.snowStone,T.snowStone,T.snowStone,T.snowStone,T.snowStone],
-  [GRAVEL]:     [T.gravel,T.gravel,T.gravel,T.gravel,T.gravel,T.gravel],
-  [RED_DIRT]:        [T.redDirt,T.redDirt,T.redDirt,T.redDirt,T.redDirt,T.redDirt],
-  [DRY_GRASS]:       [T.dryGrassSide,T.dryGrassSide,T.dryGrassTop,T.redDirt,T.dryGrassSide,T.dryGrassSide],
-  [TROP_WOOD]:       [T.tropWood,T.tropWood,T.woodTop,T.woodTop,T.tropWood,T.tropWood],
-  [TROP_LEAVES]:     [T.tropLeaves,T.tropLeaves,T.tropLeaves,T.tropLeaves,T.tropLeaves,T.tropLeaves],
-  [CLOUD_LEAVES]:    [T.cloudLeaves,T.cloudLeaves,T.cloudLeaves,T.cloudLeaves,T.cloudLeaves,T.cloudLeaves],
-  [MUD_DIRT]:        [T.mudDirt,T.mudDirt,T.mudDirt,T.mudDirt,T.mudDirt,T.mudDirt],
-  [MANGROVE_LEAVES]: [T.mangroveLeaves,T.mangroveLeaves,T.mangroveLeaves,T.mangroveLeaves,T.mangroveLeaves,T.mangroveLeaves],
-  [SWAMP_WATER]:     [T.swampWater,T.swampWater,T.swampWater,T.swampWater,T.swampWater,T.swampWater],
-  [ACACIA_WOOD]:     [T.acaciaWood,T.acaciaWood,T.acaciaTop,T.acaciaTop,T.acaciaWood,T.acaciaWood],
-  [SAVANNA_GRASS]:   [T.savannaSide,T.savannaSide,T.savannaTop,T.redDirt,T.savannaSide,T.savannaSide],
-  [ACACIA_LEAVES]:   [T.acaciaLeaves,T.acaciaLeaves,T.acaciaLeaves,T.acaciaLeaves,T.acaciaLeaves,T.acaciaLeaves],
+  [GRASS]: [T.grassSide,T.grassSide,{tex:T.grassTop,color:0x55aa33},T.dirt,T.grassSide,T.grassSide],
+  [DIRT]:  [T.dirt,T.dirt,T.dirt,T.dirt,T.dirt,T.dirt],
+  [STONE]: [T.stone,T.stone,T.stone,T.stone,T.stone,T.stone],
+  [WOOD]:  [T.wood,T.wood,T.woodTop,T.woodTop,T.wood,T.wood],
+  [LEAVES]:[T.leaves,T.leaves,T.leaves,T.leaves,T.leaves,T.leaves],
+  [SAND]:  [T.sand,T.sand,T.sand,T.sand,T.sand,T.sand],
+  // tall grass: solo cara superior (billboard), usamos la textura con color verde claro
+  [TALL_GRASS]: [{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a},{tex:T.tallGrass,color:0x7ecb4a}],
 };
 
 const BLOCK_ICON={
-  [GRASS]:T.grassTop,[DIRT]:T.dirt,[STONE]:T.stone,[WOOD]:T.woodTop,
-  [LEAVES]:T.leaves,[SAND]:T.sand,[SNOW]:T.snow,[WATER]:T.water,
-  [SNOW_STONE]:T.snowStone,[GRAVEL]:T.gravel,
-  [RED_DIRT]:T.redDirt,[DRY_GRASS]:T.dryGrassTop,[TROP_WOOD]:T.tropWood,
-  [TROP_LEAVES]:T.tropLeaves,[CLOUD_LEAVES]:T.cloudLeaves,
-  [MUD_DIRT]:T.mudDirt,[MANGROVE_LEAVES]:T.mangroveLeaves,[SWAMP_WATER]:T.swampWater,
-  [ACACIA_WOOD]:T.acaciaTop,[SAVANNA_GRASS]:T.savannaTop,[ACACIA_LEAVES]:T.acaciaLeaves,
+  [GRASS]:T.grassTop,[DIRT]:T.dirt,[STONE]:T.stone,
+  [WOOD]:T.woodTop,[LEAVES]:T.leaves,[SAND]:T.sand,[TALL_GRASS]:T.tallGrass,
 };
 
-function isOpaque(b){
-  return b!==AIR&&b!==WATER&&b!==SWAMP_WATER&&
-         b!==LEAVES&&b!==TROP_LEAVES&&b!==CLOUD_LEAVES&&
-         b!==MANGROVE_LEAVES&&b!==ACACIA_LEAVES&&b!==SNOW;
+function isOpaque(b){return b!==AIR&&b!==LEAVES&&b!==TALL_GRASS;}
+function isSolidForPlayer(b){return b!==AIR&&b!==LEAVES&&b!==TALL_GRASS;}
+function shouldRenderFace(myType,nbType){
+  if(myType===TALL_GRASS) return false; // billboard separado
+  if(nbType===AIR||nbType===TALL_GRASS) return true;
+  if(myType===LEAVES) return nbType!==LEAVES;
+  if(isOpaque(myType)&&isOpaque(nbType)) return false;
+  return true;
 }
-function isSolid(b){
-  return b!==AIR&&b!==WATER&&b!==SWAMP_WATER&&b!==SNOW;
-}
-function isWaterLike(b){ return b===WATER||b===SWAMP_WATER; }
-function isLeavesLike(b){
-  return b===LEAVES||b===TROP_LEAVES||b===CLOUD_LEAVES||b===MANGROVE_LEAVES||b===ACACIA_LEAVES;
-}
-
-window.isSolid=isSolid;
-window.SNOW_BLOCK=SNOW;
-window.AIR=AIR; window.WATER=WATER; window.SNOW=SNOW; window.GRASS=GRASS;
-window.DIRT=DIRT; window.STONE=STONE; window.WOOD=WOOD; window.LEAVES=LEAVES;
-window.SAND=SAND; window.SNOW_STONE=SNOW_STONE; window.GRAVEL=GRAVEL;
-window.RED_DIRT=RED_DIRT;
-window.BLOCK_ICON=BLOCK_ICON; window.BLOCK_NAMES=BLOCK_NAMES; window.BLOCK_FACES=BLOCK_FACES;
 
 const FACE_DIRS=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
 const FACE_VERTS=[
@@ -419,360 +380,232 @@ const inventory=new Map();
 function addItem(t,n=1){inventory.set(t,(inventory.get(t)||0)+n);}
 function removeItem(t,n=1){const c=inventory.get(t)||0;if(c<=n)inventory.delete(t);else inventory.set(t,c-n);}
 function hasItem(t){return(inventory.get(t)||0)>0;}
-const hotbar=new Array(8).fill(null); let hotbarSel=0;
-[[DIRT,64],[STONE,64],[GRASS,32],[WOOD,32],[LEAVES,32],[SAND,32],[GRAVEL,32],[TROP_WOOD,16]].forEach(([t,n])=>addItem(t,n));
+const hotbar=new Array(8).fill(null);
+let hotbarSel=0;
+[[DIRT,64],[STONE,64],[GRASS,32],[WOOD,32],[LEAVES,32],[SAND,32],[TALL_GRASS,32]].forEach(([t,n])=>addItem(t,n));
 {let hi=0;for(const[t]of inventory){if(hi<8){hotbar[hi]=t;hi++;}}}
 
 // ══════════════════════════════════════════════════════════════
-//  BIOMAS
+//  CAPAS DEL TERRENO (OBLIGATORIO)
+//  grass_block → dirt → dirt → stone → stone → stone...
 // ══════════════════════════════════════════════════════════════
-const BIOME={
-  PLAINS:10,DESERT:0,TUNDRA:10,MOUNTAINS:0,FOREST:10,
-  OCEAN:0,DEEP_OCEAN:0,SWAMP:1,SAVANNA:10,TAIGA:10,
-  DRY_TROPICAL:0,WET_TROPICAL:10,CLOUD_FOREST:0,MANGROVE:0,GRASSLAND:0,
-};
-const BIOME_NAMES=[
-  'Llanuras','Desierto','Tundra','Montañas','Bosque','Océano','Mar Profundo','Pantano','Sabana','Taiga',
-  'Bosque Seco','Selva Húmeda','Bosque Nublado','Manglar','Pastizal',
-];
 
-const _biomeCache=new Map();
-function getBiome(wx,wz){
-  const k=wx+'_'+wz; if(_biomeCache.has(k))return _biomeCache.get(k);
-  const temp  = fbm2(wx+1000,wz+1000,3,280,WORLD_SEED);
-  const humid = fbm2(wx+3000,wz+3000,3,300,WORLD_SEED+777);
-  const cont  = fbm2(wx+5000,wz+5000,2,500,WORLD_SEED+1234);
-  const tropical = fbm2(wx+7000,wz+7000,2,400,WORLD_SEED+2222);
-  let b;
-  if(cont<-0.38)b=BIOME.DEEP_OCEAN;
-  else if(cont<-0.14)b=BIOME.OCEAN;
-  else if(cont<-0.04&&tropical>0.2&&humid>0.1)b=BIOME.MANGROVE;
-  else if(temp>0.35&&humid<-0.12)b=BIOME.DESERT;
-  else if(tropical>0.28&&temp>0.25&&humid>-0.2&&humid<0.1)b=BIOME.DRY_TROPICAL;
-  else if(tropical>0.22&&temp>0.20&&humid>0.22)b=BIOME.WET_TROPICAL;
-  else if(temp>0.05&&temp<0.30&&humid>0.28&&cont>0.05)b=BIOME.CLOUD_FOREST;
-  else if(temp>0.32&&humid>=-0.12)b=BIOME.SAVANNA;
-  else if(temp>0.10&&temp<0.32&&humid>0.10&&humid<0.28)b=BIOME.GRASSLAND;
-  else if(temp<-0.30&&humid>0)b=BIOME.TUNDRA;
-  else if(temp<-0.12&&humid>0.1)b=BIOME.TAIGA;
-  else if(humid>0.32)b=BIOME.SWAMP;
-  else if(humid>0.16)b=BIOME.FOREST;
-  else{const elev=fbm2(wx+8000,wz+8000,2,180,WORLD_SEED+5555);b=elev>0.28?BIOME.MOUNTAINS:BIOME.PLAINS;}
-  _biomeCache.set(k,b);
-  if(_biomeCache.size>80000)_biomeCache.clear();
-  return b;
+// Superficie: grass_block (si altura no es extrema de montaña) o stone
+function getSurfaceBlock(surfH, cont) {
+  // Cimas muy altas → siempre stone
+  if (cont > 0.85 && surfH > 220) return STONE;
+  if (cont > 0.70 && surfH > 200) return STONE;
+  if (cont > 0.55 && surfH > 185) return STONE;
+  // El resto: grass
+  return GRASS;
+}
+
+// Profundidad 0=superficie, 1,2=dirt, >=3=stone
+function getLayerBlock(depth, surfH, cont) {
+  if (depth === 0) return getSurfaceBlock(surfH, cont);
+  if (depth <= 2) return DIRT;
+  return STONE;
 }
 
 // ══════════════════════════════════════════════════════════════
-//  SUPERFICIE
+//  TALL GRASS (CESPED DECORATIVO)
+//  Renderizado como X-billboard (dos planos cruzados)
 // ══════════════════════════════════════════════════════════════
-const _surfCache=new Map();
-function getSurface(wx,wz){
-  const k=wx+'|'+wz; if(_surfCache.has(k))return _surfCache.get(k);
-  const h=_calcSurface(wx,wz);
-  _surfCache.set(k,h);
-  if(_surfCache.size>120000)_surfCache.clear();
-  return h;
+const _tallGrassMat = new THREE.MeshBasicMaterial({
+  color: 0x7ecb4a,
+  map: T.tallGrass,
+  transparent: true,
+  alphaTest: 0.3,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+});
+
+// Noise para densidad de césped: oct=2, freq=0.06
+function getTallGrassNoise(wx, wz) {
+  return fbm(wx, wz, 2, 17, WORLD_SEED + 70000, 2.0, 0.5);
 }
-function _calcSurface(wx,wz){
-  const biome=getBiome(wx,wz);
-  const continental=fbm2(wx+200,wz+200,4,600,WORLD_SEED+10)*12;
-  const regional   =fbm2(wx+400,wz+400,5,160,WORLD_SEED+20)*10;
-  const local      =fbm2(wx+600,wz+600,4,50, WORLD_SEED+30)*5;
-  const detail     =fbm2(wx+800,wz+800,3,18, WORLD_SEED+40)*2;
-  const mountRaw   =ridgedFbm(wx+1200,wz+1200,5,200,WORLD_SEED+50);
-  const mountMask  =Math.max(0,fbm2(wx+2000,wz+2000,3,400,WORLD_SEED+60));
-  const mountains  =mountRaw*mountMask*50;
-  const erosion    =Math.max(0,fbm2(wx+3000,wz+3000,2,300,WORLD_SEED+70));
-  const erosionFactor=lerp(1.0,0.55,erosion*erosion);
-  let base;
-  switch(biome){
-    case BIOME.DEEP_OCEAN:  base=SEA_LEVEL-22+continental*0.08+local*0.4;break;
-    case BIOME.OCEAN:       base=SEA_LEVEL-6+continental*0.12+local*0.5;break;
-    case BIOME.MANGROVE:    base=SEA_LEVEL+1+continental*0.05+local*0.2;break;
-    case BIOME.PLAINS:      base=SEA_LEVEL+5+continental*0.28+regional*0.22+local*0.5+detail;break;
-    case BIOME.DESERT:      {const dune=fbm2(wx+500,wz+500,3,40,WORLD_SEED+80)*6;base=SEA_LEVEL+4+continental*0.30+regional*0.20+dune+detail;break;}
-    case BIOME.DRY_TROPICAL:base=SEA_LEVEL+7+continental*0.30+regional*0.25+local*0.6+detail;break;
-    case BIOME.WET_TROPICAL:base=SEA_LEVEL+9+continental*0.32+regional*0.30+local*0.8+detail;break;
-    case BIOME.CLOUD_FOREST:base=SEA_LEVEL+22+continental*0.40+regional*0.35+local*1.0+detail;break;
-    case BIOME.GRASSLAND:   base=SEA_LEVEL+6+continental*0.22+regional*0.20+local*0.5+detail;break;
-    case BIOME.SAVANNA:     base=SEA_LEVEL+6+continental*0.28+regional*0.24+local*0.6+detail;break;
-    case BIOME.SWAMP:       base=SEA_LEVEL-1+continental*0.08+local*0.3;break;
-    case BIOME.FOREST:      base=SEA_LEVEL+8+continental*0.35+regional*0.28+local*0.7+detail;break;
-    case BIOME.TAIGA:       base=SEA_LEVEL+10+continental*0.38+regional*0.30+local*0.8+detail;break;
-    case BIOME.TUNDRA:      base=SEA_LEVEL+6+continental*0.25+regional*0.18+local*0.5;break;
-    case BIOME.MOUNTAINS:   base=SEA_LEVEL+18+mountains*erosionFactor+continental*0.4+regional*0.35+local;break;
-    default:                base=SEA_LEVEL+5+continental*0.28+regional*0.20+local*0.5;
-  }
-  return Math.round(Math.max(4,Math.min(CHUNK_HEIGHT-4,base)));
+
+function shouldPlaceTallGrass(wx, wz, cont) {
+  // Solo en zonas con continentalness baja/media (llanuras y colinas)
+  if (cont > 0.5) return false;
+  const n = getTallGrassNoise(wx, wz);
+  // Normalizar a [0,1]
+  const normalized = (n + 1) * 0.5;
+  // Densidad alta en llanuras (cont < 0.2), disminuye con altura
+  const density = lerp(0.18, 0.08, Math.max(0, cont));
+  const h = hash2(wx*7, wz*13, WORLD_SEED + 80000) / 0xFFFFFFFF;
+  return normalized > 0.35 && h < density;
 }
-function surfaceBlock(biome,surfH){
-  switch(biome){
-    case BIOME.DESERT:case BIOME.OCEAN:case BIOME.DEEP_OCEAN:return SAND;
-    case BIOME.TUNDRA:case BIOME.TAIGA:return SNOW;
-    case BIOME.MANGROVE:return MUD_DIRT;
-    case BIOME.DRY_TROPICAL:return DRY_GRASS;
-    case BIOME.WET_TROPICAL:return GRASS;
-    case BIOME.CLOUD_FOREST:return GRASS;
-    case BIOME.GRASSLAND:case BIOME.SAVANNA:return SAVANNA_GRASS;
-    case BIOME.MOUNTAINS:
-      if(surfH>SEA_LEVEL+55)return SNOW;
-      if(surfH>SEA_LEVEL+30)return SNOW_STONE;
-      return GRASS;
-    default:return GRASS;
-  }
-}
-function subBlock(biome,surfH,depth){
-  switch(biome){
-    case BIOME.DESERT:case BIOME.OCEAN:case BIOME.DEEP_OCEAN:return depth<=5?SAND:STONE;
-    case BIOME.TUNDRA:case BIOME.TAIGA:return depth<=1?DIRT:STONE;
-    case BIOME.MANGROVE:case BIOME.WET_TROPICAL:return depth<=4?MUD_DIRT:STONE;
-    case BIOME.DRY_TROPICAL:case BIOME.SAVANNA:case BIOME.GRASSLAND:return depth<=3?RED_DIRT:STONE;
-    case BIOME.CLOUD_FOREST:return depth<=3?DIRT:STONE;
-    default:
-      if(depth<=3)return DIRT;
-      if(depth===4&&(hash2(surfH,biome,WORLD_SEED+90)%6===0))return GRAVEL;
-      return STONE;
-  }
+
+// Billboard X de cesped (dos planos cruzados)
+function buildTallGrassBillboard(wx, wy, wz) {
+  const geo = new THREE.BufferGeometry();
+  const positions = [], uvs = [], indices = [];
+  const x = wx + 0.5, y = wy, z = wz + 0.5;
+  const s = 0.5; // mitad anchura del quad
+
+  // Quad 1: diagonal \
+  positions.push(
+    x-s, y,   z-s,
+    x-s, y+1, z-s,
+    x+s, y+1, z+s,
+    x+s, y,   z+s
+  );
+  // Quad 2: diagonal /
+  positions.push(
+    x+s, y,   z-s,
+    x+s, y+1, z-s,
+    x-s, y+1, z+s,
+    x-s, y,   z+s
+  );
+
+  uvs.push(0,0,0,1,1,1,1,0, 0,0,0,1,1,1,1,0);
+  indices.push(0,1,2,0,2,3, 4,5,6,4,6,7);
+
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  return geo;
 }
 
 // ══════════════════════════════════════════════════════════════
-//  ÁRBOLES
+//  ÁRBOLES — treeNoise: oct=3, freq=0.05, threshold=0.65
 // ══════════════════════════════════════════════════════════════
-const _treeCache=new Map();
-function getTreeInfo(wx,wz){
-  const k=wx+'_'+wz;if(_treeCache.has(k))return _treeCache.get(k);
-  const info=_calcTreeInfo(wx,wz);_treeCache.set(k,info);
-  if(_treeCache.size>80000)_treeCache.clear();
-  return info;
+function shouldPlaceTree(wx, wz, cont) {
+  // Sin árboles en zonas muy altas
+  if (cont > 0.75) return false;
+  if (hash2(wx, wz, WORLD_SEED) % 3 !== 0) return false;
+
+  // treeNoise: oct=3, freq=0.05 → escala=20
+  const treeNoise = fbm(wx, wz, 3, 20, WORLD_SEED + 55555, 2.0, 0.5);
+  const normalized = (treeNoise + 1) * 0.5;
+
+  // threshold=0.65 → normalized debe superar 1-0.65=0.35 (reescalado)
+  // Más árboles donde continentalness es media (colinas, montañas bajas)
+  const baseDensity = lerp(0.18, 0.35, Math.max(0, Math.min(1, (cont + 0.5) / 1.0)));
+  const h = hash2(wx, wz, WORLD_SEED + 77777) / 0xFFFFFFFF;
+  return normalized > 0.55 && h < baseDensity;
 }
-function _calcTreeInfo(wx,wz){
-  const biome=getBiome(wx,wz);
-  const prob=
-    biome===BIOME.FOREST?0.032:biome===BIOME.PLAINS?0.008:biome===BIOME.TAIGA?0.025:
-    biome===BIOME.SWAMP?0.014:biome===BIOME.DRY_TROPICAL?0.018:biome===BIOME.WET_TROPICAL?0.045:
-    biome===BIOME.CLOUD_FOREST?0.028:biome===BIOME.MANGROVE?0.022:
-    biome===BIOME.GRASSLAND?0.005:biome===BIOME.SAVANNA?0.010:0;
-  if(!prob)return null;
-  const surfH=getSurface(wx,wz);
-  if(surfH<=SEA_LEVEL+1)return null;
-  const topBlock=surfaceBlock(biome,surfH);
-  if(topBlock!==GRASS&&topBlock!==DIRT&&topBlock!==DRY_GRASS&&topBlock!==MUD_DIRT&&topBlock!==SAVANNA_GRASS)return null;
-  const h=hash2(wx,wz,WORLD_SEED+42);
-  const r=(h&0xFFFF)/0xFFFF;
-  if(r>prob)return null;
-  const exclusionR=6;
-  for(let dx=-exclusionR;dx<=exclusionR;dx++){
-    for(let dz=-exclusionR;dz<=exclusionR;dz++){
-      if(dx===0&&dz===0)continue;
-      if(dx*dx+dz*dz>exclusionR*exclusionR)continue;
-      const nx=wx+dx,nz=wz+dz,nb=getBiome(nx,nz);
-      const np=nb===BIOME.FOREST?0.032:nb===BIOME.PLAINS?0.008:nb===BIOME.TAIGA?0.025:
-        nb===BIOME.SWAMP?0.014:nb===BIOME.DRY_TROPICAL?0.018:nb===BIOME.WET_TROPICAL?0.045:
-        nb===BIOME.CLOUD_FOREST?0.028:nb===BIOME.MANGROVE?0.022:
-        nb===BIOME.GRASSLAND?0.005:nb===BIOME.SAVANNA?0.010:0;
-      if(!np)continue;
-      const nh=hash2(nx,nz,WORLD_SEED+42),nr=(nh&0xFFFF)/0xFFFF;
-      if(nr<=np&&(nx<wx||(nx===wx&&nz<wz)))return null;
+
+function getTreeType(wx, wz) {
+  return hash2(wx, wz, WORLD_SEED + 99999) % 5;
+}
+
+const treeDeferred = [];
+
+function generateTree(data, ox, oz, lx, baseY, lz, treeType) {
+  const wx = ox + lx, wz = oz + lz;
+  function setLocal(dx, dy, dz, block) {
+    const tlx = lx + dx, tly = baseY + dy, tlz = lz + dz;
+    if (tly < 0 || tly >= CHUNK_HEIGHT) return;
+    if (tlx >= 0 && tlx < CHUNK_SIZE && tlz >= 0 && tlz < CHUNK_SIZE) {
+      const i = (tlx * CHUNK_HEIGHT + tly) * CHUNK_SIZE + tlz;
+      if (data[i] === AIR || data[i] === LEAVES || data[i] === TALL_GRASS) data[i] = block;
+    } else {
+      treeDeferred.push({wx: wx+dx, wy: tly, wz: wz+dz, block});
     }
   }
-  const hv=(h>>16)&0xFF;
-  const isPine=biome===BIOME.TAIGA;
-  const isTropical=biome===BIOME.WET_TROPICAL;
-  const isCloud=biome===BIOME.CLOUD_FOREST;
-  const isMangrove=biome===BIOME.MANGROVE;
-  const isDry=biome===BIOME.DRY_TROPICAL;
-  const isSavannaGrass=biome===BIOME.SAVANNA||biome===BIOME.GRASSLAND;
-  let treeType,trunkH,leafRad,trunkOffsets=[[0,0]];
-  if(isPine){treeType='NORMAL';trunkH=7+(hv%5);leafRad=2;}
-  else if(isMangrove){treeType='MANGROVE_TREE';trunkH=4+(hv%3);leafRad=3;trunkOffsets=hv<128?[[0,0],[1,0]]:[[0,0],[1,0],[0,1]];}
-  else if(isTropical){
-    treeType='TROPICAL';
-    if(hv<80){trunkH=10+(hv%5);leafRad=4;}
-    else if(hv<160){trunkH=13+(hv%5);leafRad=5;trunkOffsets=[[0,0],[1,0]];}
-    else{trunkH=16+(hv%6);leafRad=5;trunkOffsets=[[0,0],[1,0],[0,1],[1,1]];}
-  }else if(isCloud){treeType='CLOUD';trunkH=8+(hv%4);leafRad=4;if(hv<128)trunkOffsets=[[0,0],[1,0]];}
-  else if(isDry){treeType='NORMAL';trunkH=4+(hv%4);leafRad=2;}
-  else if(isSavannaGrass){treeType='ACACIA';trunkH=4+(hv%3);leafRad=4;}
-  else{
-    if(hv<100){treeType='NORMAL';trunkH=4+(hv%3);leafRad=2;}
-    else if(hv<160){treeType='TALL';trunkH=7+(hv%4);leafRad=3;}
-    else if(hv<195){treeType='SUPER_TALL';trunkH=11+(hv%5);leafRad=4;}
-    else if(hv<220){treeType='DOUBLE';trunkH=5+(hv%3);leafRad=3;trunkOffsets=[[0,0],[1,0]];}
-    else if(hv<240){treeType='TRIPLE';trunkH=6+(hv%3);leafRad=3;trunkOffsets=[[0,0],[1,0],[0,1]];}
-    else{treeType='QUAD';trunkH=6+(hv%3);leafRad=3;trunkOffsets=[[0,0],[1,0],[0,1],[1,1]];}
-  }
-  return{surfH,trunkH,leafRad,isPine,treeType,trunkOffsets,biome};
-}
-function treeTrunkBlock(treeType,biome){
-  if(biome===BIOME.WET_TROPICAL||biome===BIOME.DRY_TROPICAL||biome===BIOME.MANGROVE)return TROP_WOOD;
-  if(biome===BIOME.SAVANNA||biome===BIOME.GRASSLAND)return ACACIA_WOOD;
-  return WOOD;
-}
-function treeLeavesBlock(treeType,biome){
-  if(biome===BIOME.WET_TROPICAL||biome===BIOME.DRY_TROPICAL)return TROP_LEAVES;
-  if(biome===BIOME.CLOUD_FOREST)return CLOUD_LEAVES;
-  if(biome===BIOME.MANGROVE)return MANGROVE_LEAVES;
-  if(biome===BIOME.SAVANNA||biome===BIOME.GRASSLAND)return ACACIA_LEAVES;
-  return LEAVES;
-}
-function treeBlockAt(wx,worldY,wz){
-  const SEARCH=6;
-  for(let dx=-SEARCH;dx<=SEARCH;dx++){
-    for(let dz=-SEARCH;dz<=SEARCH;dz++){
-      const rx=wx+dx,rz=wz+dz,info=getTreeInfo(rx,rz);
-      if(!info)continue;
-      const{surfH,trunkH,leafRad,isPine,treeType,trunkOffsets,biome}=info;
-      const base=surfH,trunkTop=base+trunkH;
-      const TRUNK_B=treeTrunkBlock(treeType,biome),LEAF_B=treeLeavesBlock(treeType,biome);
-      for(const[ox,oz] of trunkOffsets){if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop)return TRUNK_B;}
-      if(treeType==='ACACIA'){
-        const relY=worldY-trunkTop;if(relY<0||relY>2)continue;
-        const rad=relY===0?leafRad:Math.max(1,leafRad-2);
-        if(dx*dx+dz*dz<=rad*rad+0.7){
-          let onT=false;for(const[ox,oz] of trunkOffsets)if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop){onT=true;break;}
-          if(!onT)return LEAF_B;
-        }
-      }else if(isPine){
-        const cs=base+Math.floor(trunkH*0.45),ct=trunkTop+1,relY=worldY-cs;
-        if(relY<0||relY>ct-cs)continue;
-        const rad=Math.max(0,leafRad-Math.floor(relY*(leafRad/Math.max(1,ct-cs))));
-        if(dx*dx+dz*dz<=rad*rad+0.7){
-          let onT=false;for(const[ox,oz] of trunkOffsets)if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop){onT=true;break;}
-          if(!onT)return LEAF_B;
-        }
-      }else if(treeType==='MANGROVE_TREE'){
-        const cs=trunkTop-1,ct=trunkTop+2,relY=worldY-cs;
-        if(relY<0||relY>ct-cs)continue;
-        let cx=0,cz=0;for(const[ox,oz] of trunkOffsets){cx+=ox;cz+=oz;}cx/=trunkOffsets.length;cz/=trunkOffsets.length;
-        const cdx=dx-cx,cdz=dz-cz,r2=cdx*cdx+cdz*cdz;
-        const rad=relY/(ct-cs)<0.5?leafRad:Math.max(1,leafRad-1);
-        if(r2<=rad*rad+0.7){
-          let onT=false;for(const[ox,oz] of trunkOffsets)if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop){onT=true;break;}
-          if(!onT)return LEAF_B;
-        }
-      }else{
-        const co=(treeType==='SUPER_TALL'||treeType==='TALL'||treeType==='TROPICAL'||treeType==='CLOUD')?2:1;
-        const cs=trunkTop-co,ct=trunkTop+2,relY=worldY-cs;
-        if(relY<0||relY>ct-cs)continue;
-        const norm=relY/Math.max(1,ct-cs);
-        let rad;
-        if(norm<0.25)rad=leafRad;else if(norm<0.55)rad=leafRad;
-        else if(norm<0.80)rad=Math.max(1,leafRad-1);else rad=1;
-        let cx=0,cz=0;for(const[ox,oz] of trunkOffsets){cx+=ox;cz+=oz;}cx/=trunkOffsets.length;cz/=trunkOffsets.length;
-        const cdx=dx-cx,cdz=dz-cz,r2=cdx*cdx+cdz*cdz;
-        if(r2<=rad*rad+0.6){
-          let onT=false;for(const[ox,oz] of trunkOffsets)if(dx===ox&&dz===oz&&worldY>base&&worldY<=trunkTop){onT=true;break;}
-          if(!onT)return LEAF_B;
+
+  let trunkH, crownR, crownH, crownStart;
+  const rng = (hash2(wx*3, wz*7, WORLD_SEED) % 3);
+  if (treeType === 0) { trunkH=4+rng; crownR=2; crownH=3; crownStart=trunkH-1; }
+  else if (treeType === 1) { trunkH=6+rng; crownR=2; crownH=4; crownStart=trunkH-2; }
+  else if (treeType === 2) { trunkH=4+rng%2; crownR=3; crownH=4; crownStart=trunkH-2; }
+  else if (treeType === 3) { trunkH=2+rng%2; crownR=2; crownH=2; crownStart=trunkH-1; }
+  else { trunkH=8+rng+1; crownR=3; crownH=5; crownStart=trunkH-3; }
+
+  for (let dy = 0; dy < trunkH; dy++) setLocal(0, dy, 0, WOOD);
+
+  for (let dy = crownStart; dy <= trunkH + crownH; dy++) {
+    const relY = dy - (trunkH + crownH * 0.5);
+    const maxR = crownR * (1 - Math.abs(relY) / (crownH * 0.5 + crownR * 0.3));
+    const r = Math.max(0, maxR);
+    for (let dx = -Math.ceil(r+0.5); dx <= Math.ceil(r+0.5); dx++) {
+      for (let dz = -Math.ceil(r+0.5); dz <= Math.ceil(r+0.5); dz++) {
+        const dist = Math.sqrt(dx*dx + (relY*0.85)*(relY*0.85) + dz*dz);
+        if (dist <= r + 0.5) {
+          const en = (hash2(wx+dx, wz+dz, dy*17+WORLD_SEED) % 10) / 10.0;
+          if (dist <= r + 0.2 || (dist <= r + 0.7 && en > 0.35)) setLocal(dx, dy, dz, LEAVES);
         }
       }
     }
   }
-  return AIR;
 }
 
 // ══════════════════════════════════════════════════════════════
-//  WORLD DATA — cache en memoria con generación en worker
+//  WORLD DATA
 // ══════════════════════════════════════════════════════════════
-const worldData   = new Map();   // clave → Uint8Array (chunks modificados por jugador)
-const workerData  = new Map();   // clave → Uint8Array (chunks generados por worker)
+const worldData   = new Map();
 const chunkMeshes = new Map();
-const pendingWorker = new Set(); // chunks enviados al worker, esperando respuesta
-const _dirtyChunks  = new Set();
+function chunkKey(cx,cz){return cx+','+cz;}
 
-function chunkKey(cx,cz){ return cx+','+cz; }
-
-// ── Web Worker pool ──
-const NUM_WORKERS = Math.max(2, Math.min(navigator.hardwareConcurrency||4, 6));
-const workers = [];
-let workerRoundRobin = 0;
-let workerJobId = 0;
-const workerJobMap = new Map(); // id → {cx,cz}
-
-for(let i=0;i<NUM_WORKERS;i++){
-  const w = new Worker('chunkworker.js');
-  w.postMessage({type:'init', seed:WORLD_SEED, seaLevel:SEA_LEVEL});
-  w.onmessage = function(e){
-    const{cx,cz,id,data}=e.data;
-    const key=chunkKey(cx,cz);
-    pendingWorker.delete(key);
-    workerJobMap.delete(id);
-    if(!worldData.has(key)){
-      // Chunk sin modificaciones del jugador: usar datos del worker
-      workerData.set(key,data);
-    }
-    // Si ya existe en worldData (jugador modificó antes de recibir): no sobreescribir
-    if(!chunkMeshes.has(key)){
-      const grp = buildChunkMesh(cx,cz);
-      scene.add(grp);
-      chunkMeshes.set(key,grp);
-      updateLoadBar();
-    }
-  };
-  workers.push(w);
-}
-
-function sendToWorker(cx,cz){
-  const key=chunkKey(cx,cz);
-  if(pendingWorker.has(key))return;
-  pendingWorker.add(key);
-  const id = ++workerJobId;
-  workerJobMap.set(id,{cx,cz});
-  const w = workers[workerRoundRobin % NUM_WORKERS];
-  workerRoundRobin++;
-  w.postMessage({type:'generate',cx,cz,id});
-}
-
-// ── Acceso a datos de chunk ──
-function getChunkData(cx,cz){
-  const key=chunkKey(cx,cz);
-  // Prioridad: datos modificados por jugador > datos del worker
-  if(worldData.has(key))return worldData.get(key);
-  if(workerData.has(key))return workerData.get(key);
-  return null; // aún no generado
-}
-
-// Generar chunk en hilo principal SOLO si es urgente (spawn inicial)
-function generateChunkSync(cx,cz){
+function generateChunk(cx,cz){
   const key=chunkKey(cx,cz);
   if(worldData.has(key))return worldData.get(key);
-  if(workerData.has(key))return workerData.get(key);
-
   const data=new Uint8Array(CHUNK_SIZE*CHUNK_HEIGHT*CHUNK_SIZE);
-  const ox=cx*CHUNK_SIZE,oz=cz*CHUNK_SIZE;
-  function idx(lx,ly,lz){return(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz;}
+  const ox=cx*CHUNK_SIZE, oz=cz*CHUNK_SIZE;
+
+  // ── PASO 1: Terreno base ──
   for(let lx=0;lx<CHUNK_SIZE;lx++){
     for(let lz=0;lz<CHUNK_SIZE;lz++){
-      const wx=ox+lx,wz=oz+lz;
-      const biome=getBiome(wx,wz);
-      const surfH=getSurface(wx,wz);
-      for(let ly=0;ly<CHUNK_HEIGHT;ly++){
-        let b;
-        if(ly<=1)b=STONE;
-        else if(ly<=surfH){
-          const depth=surfH-ly;
-          b=depth===0?surfaceBlock(biome,surfH):subBlock(biome,surfH,depth);
-        }else if(biome===BIOME.MANGROVE&&ly<=SEA_LEVEL+1){b=SWAMP_WATER;}
-        else if(ly<=SEA_LEVEL)b=WATER;
-        else b=AIR;
-        data[idx(lx,ly,lz)]=b;
+      const wx=ox+lx, wz=oz+lz;
+      const cont = getContinentalness(wx, wz);
+      const surfH = getSurface(wx, wz);
+
+      // Bedrock
+      data[(lx*CHUNK_HEIGHT+0)*CHUNK_SIZE+lz] = STONE;
+
+      for(let ly=1;ly<CHUNK_HEIGHT;ly++){
+        let b = AIR;
+        if(ly <= surfH){
+          const depth = surfH - ly;
+          b = getLayerBlock(depth, surfH, cont);
+        }
+        data[(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz] = b;
+      }
+
+      // Rellenar huecos verticales: scan de abajo a arriba
+      let lastSolid = true; // el bedrock es sólido
+      for(let ly=1;ly<=surfH;ly++){
+        const idx=(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz;
+        const b=data[idx];
+        if(b===AIR && lastSolid){ data[idx]=STONE; }
+        if(b!==AIR) lastSolid=true;
       }
     }
   }
+
+  worldData.set(key, data);
+
+  // ── PASO 2: Árboles y cespéd ──
   for(let lx=0;lx<CHUNK_SIZE;lx++){
     for(let lz=0;lz<CHUNK_SIZE;lz++){
-      const wx=ox+lx,wz=oz+lz;
-      const surfH=getSurface(wx,wz);
-      const maxY=Math.min(surfH+24,CHUNK_HEIGHT-1);
-      for(let worldY=surfH+1;worldY<=maxY;worldY++){
-        if(data[idx(lx,worldY,lz)]===AIR){
-          const tb=treeBlockAt(wx,worldY,wz);
-          if(tb!==AIR)data[idx(lx,worldY,lz)]=tb;
+      const wx=ox+lx, wz=oz+lz;
+      const cont = getContinentalness(wx, wz);
+      const surfH = getSurface(wx, wz);
+
+      const surfIdx=(lx*CHUNK_HEIGHT+surfH)*CHUNK_SIZE+lz;
+      const surfBlock=data[surfIdx];
+      if(surfBlock !== GRASS) continue;
+
+      if(shouldPlaceTree(wx, wz, cont)){
+        generateTree(data, ox, oz, lx, surfH+1, lz, getTreeType(wx, wz));
+      } else {
+        // Césped decorativo sobre grass_block
+        if(shouldPlaceTallGrass(wx, wz, cont)){
+          const tgY = surfH + 1;
+          if(tgY < CHUNK_HEIGHT){
+            const tgIdx=(lx*CHUNK_HEIGHT+tgY)*CHUNK_SIZE+lz;
+            if(data[tgIdx]===AIR) data[tgIdx]=TALL_GRASS;
+          }
         }
       }
     }
   }
-  workerData.set(key,data);
+
+  // ── PASO 3: Bloques diferidos de árbol ──
+  flushDeferredBlocks();
+
   return data;
 }
 
@@ -781,240 +614,119 @@ function getBlock(wx,worldY,wz){
   const cx=Math.floor(wx/CHUNK_SIZE),cz=Math.floor(wz/CHUNK_SIZE);
   const lx=((wx%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
   const lz=((wz%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
-  // Prioridad: worldData (modificaciones del jugador), luego workerData
   const key=chunkKey(cx,cz);
-  let d=worldData.get(key)||workerData.get(key);
-  return d?d[(lx*CHUNK_HEIGHT+worldY)*CHUNK_SIZE+lz]:AIR;
+  let d=worldData.get(key);
+  if(!d){generateChunk(cx,cz);d=worldData.get(key);}
+  return d[(lx*CHUNK_HEIGHT+worldY)*CHUNK_SIZE+lz];
 }
 
-function _writeBlock(wx,worldY,wz,type){
-  if(worldY<0||worldY>=CHUNK_HEIGHT)return null;
+function setBlock(wx,worldY,wz,type){
+  if(worldY<0||worldY>=CHUNK_HEIGHT)return;
   const cx=Math.floor(wx/CHUNK_SIZE),cz=Math.floor(wz/CHUNK_SIZE);
   const lx=((wx%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
   const lz=((wz%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
   const key=chunkKey(cx,cz);
-  // Copiar desde workerData si no hay worldData aún
-  if(!worldData.has(key)){
-    const src=workerData.get(key);
-    if(src) worldData.set(key,new Uint8Array(src));
-    else worldData.set(key,new Uint8Array(CHUNK_SIZE*CHUNK_HEIGHT*CHUNK_SIZE));
-  }
+  if(!worldData.has(key))generateChunk(cx,cz);
   const d=worldData.get(key);
   d[(lx*CHUNK_HEIGHT+worldY)*CHUNK_SIZE+lz]=type;
-  return{cx,cz,lx,lz};
+  rebuildChunk(cx,cz);
+  if(lx===0)rebuildChunk(cx-1,cz);
+  if(lx===CHUNK_SIZE-1)rebuildChunk(cx+1,cz);
+  if(lz===0)rebuildChunk(cx,cz-1);
+  if(lz===CHUNK_SIZE-1)rebuildChunk(cx,cz+1);
 }
 
-function markDirty(cx,cz){_dirtyChunks.add(cx+','+cz);}
-
-function setBlock(wx,worldY,wz,type){
-  const r=_writeBlock(wx,worldY,wz,type);if(!r)return;
-  const{cx,cz,lx,lz}=r;
-  markDirty(cx,cz);
-  if(lx===0)markDirty(cx-1,cz);
-  if(lx===CHUNK_SIZE-1)markDirty(cx+1,cz);
-  if(lz===0)markDirty(cx,cz-1);
-  if(lz===CHUNK_SIZE-1)markDirty(cx,cz+1);
-  if(type===SAND||type===GRAVEL){scheduleSand(wx,worldY,wz);scheduleSand(wx,worldY+1,wz);}
-  if(type===WATER||type===SWAMP_WATER){scheduleWater(wx,worldY,wz);}
-  if(type===AIR){
-    scheduleSand(wx,worldY+1,wz);
-    for(const[ddx,ddy,ddz]of[[1,0,0],[-1,0,0],[0,0,1],[0,0,-1],[0,1,0]]){
-      const nb=getBlock(wx+ddx,worldY+ddy,wz+ddz);
-      if(nb===WATER||nb===SWAMP_WATER)scheduleWater(wx+ddx,worldY+ddy,wz+ddz);
-    }
-  }
-}
-
-function flushDirty(){
-  if(!_dirtyChunks.size)return;
-  for(const k of _dirtyChunks){
-    const[cx,cz]=k.split(',').map(Number);rebuildChunk(cx,cz);
-  }
-  _dirtyChunks.clear();
-}
-
-// ── Barra de progreso de carga ──
-let totalChunksQueued=0;
-function updateLoadBar(){
-  const pending=pendingWorker.size+chunkQueue.length;
-  if(pending===0||totalChunksQueued===0){loadBar.style.width='0%';return;}
-  const pct=Math.round((1-pending/Math.max(totalChunksQueued,pending))*100);
-  loadBar.style.width=pct+'%';
-}
-
-// ══════════════════════════════════════════════════════════════
-//  FÍSICA: ARENA
-// ══════════════════════════════════════════════════════════════
-const sandQueue=new Map();
-const SAND_FALL_DELAY=4;
-const sandEntities=[];
-function scheduleSand(wx,wy,wz){
-  const k=wx+'|'+wy+'|'+wz;
-  if(!sandQueue.has(k))sandQueue.set(k,SAND_FALL_DELAY);
-}
-const _sandGeo=new THREE.BoxGeometry(0.98,0.98,0.98);
-function processSand(){
-  if(!sandQueue.size)return;
-  const toFall=[];
-  for(const[k,timer]of sandQueue){
-    const nt=timer-1;
-    if(nt<=0){toFall.push(k);sandQueue.delete(k);}else sandQueue.set(k,nt);
-  }
-  if(!toFall.length)return;
-  const rebuild=new Set();
-  for(const k of toFall){
-    const[x,y,z]=k.split('|').map(Number);
-    const b=getBlock(x,y,z);
-    if(b!==SAND&&b!==GRAVEL)continue;
-    const below=getBlock(x,y-1,z);
-    if(below===AIR||isWaterLike(below)){
-      _writeBlock(x,y,z,AIR);
-      const mat=new THREE.MeshLambertMaterial({map:BLOCK_FACES[b][2]});
-      const mesh=new THREE.Mesh(_sandGeo,mat);
-      mesh.position.set(x+0.5,y+0.5,z+0.5);
-      scene.add(mesh);
-      sandEntities.push({mesh,x,y,z,type:b,vy:0,active:true});
-      const cx=Math.floor(x/CHUNK_SIZE),cz=Math.floor(z/CHUNK_SIZE);
-      rebuild.add(cx+','+cz);
-    }
-  }
-  for(const k of rebuild){const[cx,cz]=k.split(',').map(Number);rebuildChunk(cx,cz);}
-}
-function updateSandEntities(dt){
-  const toRemove=[];
-  for(let i=0;i<sandEntities.length;i++){
-    const e=sandEntities[i];if(!e.active)continue;
-    e.vy-=5*dt;
-    e.mesh.position.y+=e.vy*dt*12;
-    const gx=Math.round(e.mesh.position.x-0.5);
-    const gz=Math.round(e.mesh.position.z-0.5);
-    const landY=Math.floor(e.mesh.position.y-0.5);
-    const here=getBlock(gx,landY+1,gz);
-    if((here!==AIR&&!isWaterLike(here))||e.mesh.position.y<1){
-      const finalY=Math.max(1,landY+1);
-      if(getBlock(gx,finalY,gz)===AIR){_writeBlock(gx,finalY,gz,e.type);markDirty(Math.floor(gx/CHUNK_SIZE),Math.floor(gz/CHUNK_SIZE));scheduleSand(gx,finalY+1,gz);}
-      scene.remove(e.mesh);e.mesh.material.dispose();e.active=false;toRemove.push(i);flushDirty();
-    }else if(getBlock(gx,landY,gz)!==AIR&&!isWaterLike(getBlock(gx,landY,gz))&&landY>=0){
-      if(getBlock(gx,landY+1,gz)===AIR){_writeBlock(gx,landY+1,gz,e.type);markDirty(Math.floor(gx/CHUNK_SIZE),Math.floor(gz/CHUNK_SIZE));scheduleSand(gx,landY+2,gz);}
-      scene.remove(e.mesh);e.mesh.material.dispose();e.active=false;toRemove.push(i);flushDirty();
-    }
-  }
-  for(let i=toRemove.length-1;i>=0;i--)sandEntities.splice(toRemove[i],1);
-}
-
-// ══════════════════════════════════════════════════════════════
-//  FÍSICA: AGUA
-// ══════════════════════════════════════════════════════════════
-const waterLevels=new Map();
-function wKey(wx,wy,wz){return wx+'|'+wy+'|'+wz;}
-function getWL(wx,wy,wz){return waterLevels.get(wKey(wx,wy,wz))||0;}
-function setWaterLevel(wx,wy,wz,lvl){const k=wKey(wx,wy,wz);if(lvl<=0)waterLevels.delete(k);else waterLevels.set(k,lvl);}
-const waterQueue=new Set();
-function scheduleWater(wx,wy,wz){waterQueue.add(wx+'|'+wy+'|'+wz);}
-const WATER_BUDGET=48;
-function processWater(){
-  if(!waterQueue.size)return;
-  const items=[...waterQueue].slice(0,WATER_BUDGET);
-  for(const k of items)waterQueue.delete(k);
-  const rebuild=new Set();
-  function markRebuild(wx,wz){
+function flushDeferredBlocks(){
+  for(const{wx,wy,wz,block}of treeDeferred){
     const cx=Math.floor(wx/CHUNK_SIZE),cz=Math.floor(wz/CHUNK_SIZE);
-    rebuild.add(cx+','+cz);
     const lx=((wx%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
-    const lzv=((wz%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
-    if(lx===0)rebuild.add((cx-1)+','+cz);
-    if(lx===CHUNK_SIZE-1)rebuild.add((cx+1)+','+cz);
-    if(lzv===0)rebuild.add(cx+','+(cz-1));
-    if(lzv===CHUNK_SIZE-1)rebuild.add(cx+','+(cz+1));
-  }
-  function tryPlace(wx,wy,wz,lvl){
-    const prev=getBlock(wx,wy,wz);
-    if(prev!==AIR&&!isWaterLike(prev))return false;
-    const curLvl=getWL(wx,wy,wz);
-    if(isWaterLike(prev)&&curLvl>=lvl)return false;
-    _writeBlock(wx,wy,wz,WATER);setWaterLevel(wx,wy,wz,lvl);markRebuild(wx,wz);return true;
-  }
-  for(const k of items){
-    const[wx,wy,wz]=k.split('|').map(Number);
-    const blk=getBlock(wx,wy,wz);
-    if(!isWaterLike(blk))continue;
-    const myLvl=getWL(wx,wy,wz);if(myLvl<=0)continue;
-    const belowB=getBlock(wx,wy-1,wz);
-    if(belowB===AIR||isWaterLike(belowB)){if(tryPlace(wx,wy-1,wz,8)){scheduleWater(wx,wy-1,wz);continue;}}
-    if(myLvl>=2){
-      const spread=myLvl-1;
-      for(const[ddx,ddz]of[[1,0],[-1,0],[0,1],[0,-1]]){
-        const nx=wx+ddx,nz=wz+ddz,nb=getBlock(nx,wy,nz);
-        if(nb===AIR||isWaterLike(nb)){if(tryPlace(nx,wy,nz,spread))scheduleWater(nx,wy,nz);}
-      }
+    const lz=((wz%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
+    const k=chunkKey(cx,cz);
+    if(worldData.has(k)){
+      const d=worldData.get(k);
+      const i=(lx*CHUNK_HEIGHT+wy)*CHUNK_SIZE+lz;
+      if(d[i]===AIR||d[i]===LEAVES||d[i]===TALL_GRASS)d[i]=block;
     }
   }
-  for(const k of rebuild){const[cx,cz]=k.split(',').map(Number);rebuildChunk(cx,cz);}
+  treeDeferred.length=0;
 }
 
 // ══════════════════════════════════════════════════════════════
-//  MESH DE CHUNK
+//  MATERIALES / MESH
 // ══════════════════════════════════════════════════════════════
-const _matCache=new Map();
-function getMat(tex,isWater,isLeaves){
-  const k=tex.uuid+'_'+isWater+'_'+isLeaves;
-  if(_matCache.has(k))return _matCache.get(k);
-  const m=new THREE.MeshLambertMaterial({
-    map:tex,transparent:isWater||isLeaves,opacity:isWater?0.72:1,
-    alphaTest:isLeaves?0.3:0,side:isLeaves?THREE.DoubleSide:THREE.FrontSide,depthWrite:!isWater,
-  });
-  _matCache.set(k,m);return m;
-}
-function shouldRenderFace(myType,nbType){
-  if(nbType===AIR)return true;
-  if(isWaterLike(myType))return!isWaterLike(nbType);
-  if(isLeavesLike(myType))return!isLeavesLike(nbType);
-  if(isOpaque(myType)&&isOpaque(nbType))return false;
-  return true;
+const MAT_CACHE=new Map();
+function getMat(tex,color=null){
+  if(!tex)return new THREE.MeshLambertMaterial({color:0xff00ff});
+  const key=tex.uuid+(color?'_'+color:'');
+  if(!MAT_CACHE.has(key))MAT_CACHE.set(key,new THREE.MeshLambertMaterial({map:tex,color:color??0xffffff}));
+  return MAT_CACHE.get(key);
 }
 
 function buildChunkMesh(cx,cz){
-  const data=getChunkData(cx,cz);
-  if(!data) return new THREE.Group();
+  const data=worldData.get(chunkKey(cx,cz));
+  if(!data)return new THREE.Group();
   const ox=cx*CHUNK_SIZE,oz=cz*CHUNK_SIZE;
   const byTex=new Map();
   let minY=CHUNK_HEIGHT,maxY=0;
 
-  function arr(tex){if(!byTex.has(tex))byTex.set(tex,{p:[],u:[],i:[],n:0});return byTex.get(tex);}
+  // Geometrías para césped billboard
+  const tallGrassPositions=[], tallGrassUVs=[], tallGrassIndices=[];
+  let tgVCount=0;
 
-  const neighbor={};
-  const ndirs=[[-1,0],[1,0],[0,-1],[0,1]];
-  for(const[ndx,ndz]of ndirs){
-    const nk=chunkKey(cx+ndx,cz+ndz);
-    const nd=worldData.get(nk)||workerData.get(nk)||null;
-    neighbor[ndx*10+ndz]=nd;
-  }
-
-  function fastGetBlock(lx,ly,lz){
-    if(ly<0||ly>=CHUNK_HEIGHT)return AIR;
-    if(lx>=0&&lx<CHUNK_SIZE&&lz>=0&&lz<CHUNK_SIZE)return data[(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz];
-    let ndx=0,ndz=0,nlx=lx,nlz=lz;
-    if(lx<0){ndx=-1;nlx=lx+CHUNK_SIZE;}else if(lx>=CHUNK_SIZE){ndx=1;nlx=lx-CHUNK_SIZE;}
-    if(lz<0){ndz=-1;nlz=lz+CHUNK_SIZE;}else if(lz>=CHUNK_SIZE){ndz=1;nlz=lz-CHUNK_SIZE;}
-    const nd=neighbor[ndx*10+ndz];
-    return nd?nd[(nlx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+nlz]:AIR;
-  }
+  function arr(mat){if(!byTex.has(mat))byTex.set(mat,{p:[],u:[],i:[],n:0});return byTex.get(mat);}
 
   for(let lx=0;lx<CHUNK_SIZE;lx++){
     for(let lz=0;lz<CHUNK_SIZE;lz++){
       for(let ly=1;ly<CHUNK_HEIGHT;ly++){
         const type=data[(lx*CHUNK_HEIGHT+ly)*CHUNK_SIZE+lz];
         if(type===AIR)continue;
-        const faces=BLOCK_FACES[type];if(!faces)continue;
-        const wx=ox+lx,worldY=ly,wz=oz+lz;
+
+        const wx=ox+lx, worldY=ly, wz2=oz+lz;
         if(ly>maxY)maxY=ly;if(ly<minY)minY=ly;
+
+        // Tall grass → billboard especial
+        if(type===TALL_GRASS){
+          const x=wx+0.5, y=worldY, z=wz2+0.5;
+          const s=0.5;
+          // Quad diagonal 1
+          tallGrassPositions.push(x-s,y,z-s, x-s,y+1,z-s, x+s,y+1,z+s, x+s,y,z+s);
+          // Quad diagonal 2
+          tallGrassPositions.push(x+s,y,z-s, x+s,y+1,z-s, x-s,y+1,z+s, x-s,y,z+s);
+          tallGrassUVs.push(0,0,0,1,1,1,1,0, 0,0,0,1,1,1,1,0);
+          const b=tgVCount;
+          tallGrassIndices.push(b,b+1,b+2,b,b+2,b+3, b+4,b+5,b+6,b+4,b+6,b+7);
+          tgVCount+=8;
+          continue;
+        }
+
+        const faces=BLOCK_FACES[type];if(!faces)continue;
+
         for(let f=0;f<6;f++){
           const[ndx,ndy,ndz]=FACE_DIRS[f];
-          const nb=fastGetBlock(lx+ndx,ly+ndy,lz+ndz);
+          const nx=lx+ndx,ny=ly+ndy,nz=lz+ndz;
+          let nb=AIR;
+          if(ny>=0&&ny<CHUNK_HEIGHT){
+            if(nx>=0&&nx<CHUNK_SIZE&&nz>=0&&nz<CHUNK_SIZE){
+              nb=data[(nx*CHUNK_HEIGHT+ny)*CHUNK_SIZE+nz];
+            }else{
+              const ncx=cx+Math.floor(nx/CHUNK_SIZE),ncz=cz+Math.floor(nz/CHUNK_SIZE);
+              const nlx=((nx%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE,nlz=((nz%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
+              const nd=worldData.get(chunkKey(ncx,ncz));
+              if(nd)nb=nd[(nlx*CHUNK_HEIGHT+ny)*CHUNK_SIZE+nlz];
+            }
+          }
           if(!shouldRenderFace(type,nb))continue;
-          const tex=faces[f],a=arr(tex),vs=FACE_VERTS[f],base=a.n;
-          for(let v=0;v<4;v++){a.p.push(wx+vs[v][0],worldY+vs[v][1],wz+vs[v][2]);a.u.push(FACE_UV[v][0],FACE_UV[v][1]);}
-          a.i.push(base,base+1,base+2,base,base+2,base+3);a.n+=4;
+          const faceDef=faces[f];
+          let tex,color=null;
+          if(faceDef&&typeof faceDef==='object'&&faceDef.tex){tex=faceDef.tex;color=faceDef.color;}
+          else{tex=faceDef;}
+          const mat=getMat(tex,color);
+          const a=arr(mat);
+          const vs=FACE_VERTS[f];
+          const base=a.n;
+          for(let v=0;v<4;v++){a.p.push(wx+vs[v][0],worldY+vs[v][1],wz2+vs[v][2]);a.u.push(FACE_UV[v][0],FACE_UV[v][1]);}
+          a.i.push(base,base+1,base+2,base,base+2,base+3);
+          a.n+=4;
         }
       }
     }
@@ -1026,158 +738,76 @@ function buildChunkMesh(cx,cz){
   group.userData.boundRadius=Math.sqrt(halfW*halfW+halfH*halfH)+2;
   group.userData.center=new THREE.Vector3(centerX,centerY,centerZ);
 
-  for(const[tex,a]of byTex){
+  for(const[mat,a]of byTex){
     if(!a.n)continue;
     const geo=new THREE.BufferGeometry();
     geo.setAttribute('position',new THREE.Float32BufferAttribute(a.p,3));
     geo.setAttribute('uv',new THREE.Float32BufferAttribute(a.u,2));
     geo.setIndex(a.i);geo.computeVertexNormals();
-    const isW=isWaterLike(tex)||tex===T.swampWater;
-    const isL=isLeavesLike(tex)||(tex===T.tropLeaves||tex===T.cloudLeaves||tex===T.mangroveLeaves||tex===T.acaciaLeaves);
-    group.add(new THREE.Mesh(geo,getMat(tex,isW,isL)));
+    group.add(new THREE.Mesh(geo,mat));
   }
+
+  // Tall grass billboard mesh
+  if(tgVCount > 0){
+    const tgGeo=new THREE.BufferGeometry();
+    tgGeo.setAttribute('position',new THREE.Float32BufferAttribute(tallGrassPositions,3));
+    tgGeo.setAttribute('uv',new THREE.Float32BufferAttribute(tallGrassUVs,2));
+    tgGeo.setIndex(tallGrassIndices);
+    const tgMat=new THREE.MeshBasicMaterial({
+      map: T.tallGrass,
+      color: 0x7ecb4a,
+      transparent: true,
+      alphaTest: 0.25,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    group.add(new THREE.Mesh(tgGeo,tgMat));
+  }
+
   return group;
 }
 
 function rebuildChunk(cx,cz){
   const key=chunkKey(cx,cz);
   const old=chunkMeshes.get(key);
-  if(old){scene.remove(old);old.children.forEach(m=>m.geometry.dispose());}
-  const data=getChunkData(cx,cz);
-  if(!data)return;
+  if(old){scene.remove(old);old.children.forEach(m=>{if(m.geometry)m.geometry.dispose();});}
+  if(!worldData.has(key))generateChunk(cx,cz);
   const grp=buildChunkMesh(cx,cz);
   scene.add(grp);chunkMeshes.set(key,grp);
 }
 
 // ══════════════════════════════════════════════════════════════
-//  FRUSTUM CULLING
+//  CHUNKS
 // ══════════════════════════════════════════════════════════════
-function updateFrustumCulling(){
-  camera.updateMatrixWorld();
-  _frustumMat.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);
-  _frustum.setFromProjectionMatrix(_frustumMat);
-  for(const[,grp]of chunkMeshes){
-    if(!grp.userData.center)continue;
-    _chunkSphere.center.copy(grp.userData.center);
-    _chunkSphere.radius=grp.userData.boundRadius;
-    grp.visible=_frustum.intersectsSphere(_chunkSphere);
-  }
-}
-
-// ══════════════════════════════════════════════════════════════
-//  CARGA DE CHUNKS — cola priorizada con worker
-// ══════════════════════════════════════════════════════════════
-const RENDER_DIST_MIN=6, RENDER_DIST_MAX=26;
 let RENDER_DIST=8;
-let lastCX=9999,lastCZ=9999;
-const chunkQueue=[];  // cola de chunks a solicitar al worker
+let lastCX=9999, lastCZ=9999;
 
 function updateChunks(){
   const pcx=Math.floor(camera.position.x/CHUNK_SIZE);
   const pcz=Math.floor(camera.position.z/CHUNK_SIZE);
-
   if(pcx!==lastCX||pcz!==lastCZ){
     lastCX=pcx;lastCZ=pcz;
-    const newRequests=[];
     for(let dx=-RENDER_DIST;dx<=RENDER_DIST;dx++){
       for(let dz=-RENDER_DIST;dz<=RENDER_DIST;dz++){
         if(dx*dx+dz*dz>RENDER_DIST*RENDER_DIST)continue;
-        const cx=pcx+dx,cz=pcz+dz,key=chunkKey(cx,cz);
-        if(!chunkMeshes.has(key)&&!pendingWorker.has(key)){
-          newRequests.push({cx,cz,d2:dx*dx+dz*dz});
-        }
+        const cx=pcx+dx,cz=pcz+dz;
+        const key=chunkKey(cx,cz);
+        if(!worldData.has(key))generateChunk(cx,cz);
+        if(!chunkMeshes.has(key)){const grp=buildChunkMesh(cx,cz);scene.add(grp);chunkMeshes.set(key,grp);}
       }
     }
-    newRequests.sort((a,b)=>a.d2-b.d2);
-    for(const r of newRequests) chunkQueue.push(r);
-    chunkQueue.sort((a,b)=>a.d2-b.d2);
-    totalChunksQueued=Math.max(totalChunksQueued,chunkQueue.length+pendingWorker.size);
-
-    // Unload chunks lejanos
     for(const[key,grp]of chunkMeshes){
       const[kx,kz]=key.split(',').map(Number);
-      const d2=(kx-pcx)**2+(kz-pcz)**2;
-      if(d2>(RENDER_DIST+3)**2){
-        scene.remove(grp);grp.children.forEach(m=>m.geometry.dispose());
+      if((kx-pcx)**2+(kz-pcz)**2>(RENDER_DIST+2)**2){
+        scene.remove(grp);grp.children.forEach(m=>{if(m.geometry)m.geometry.dispose();});
         chunkMeshes.delete(key);
-        // Liberar workerData de chunks muy lejanos (>RENDER_DIST+8)
-        if(d2>(RENDER_DIST+8)**2){
-          workerData.delete(key);
-          // worldData NO se elimina (preservar cambios del jugador)
-        }
       }
     }
   }
-
-  // Enviar hasta 4 chunks por frame al worker
-  let sent=0;
-  while(chunkQueue.length>0&&sent<4){
-    const{cx,cz}=chunkQueue.shift();
-    const key=chunkKey(cx,cz);
-    if(chunkMeshes.has(key)||pendingWorker.has(key))continue;
-    // Si ya tenemos datos (workerData), construir mesh de inmediato
-    if(workerData.has(key)||worldData.has(key)){
-      const grp=buildChunkMesh(cx,cz);
-      scene.add(grp);chunkMeshes.set(key,grp);
-    }else{
-      sendToWorker(cx,cz);
-    }
-    sent++;
-  }
-  updateLoadBar();
-}
-
-// Precache sincrónico para zona de spawn (radio pequeño)
-function precacheArea(pcx,pcz,radius){
-  const candidates=[];
-  for(let dx=-radius;dx<=radius;dx++){
-    for(let dz=-radius;dz<=radius;dz++){
-      if(dx*dx+dz*dz>radius*radius)continue;
-      candidates.push({cx:pcx+dx,cz:pcz+dz,d2:dx*dx+dz*dz});
-    }
-  }
-  candidates.sort((a,b)=>a.d2-b.d2);
-  for(const{cx,cz}of candidates){
-    generateChunkSync(cx,cz);
-    const key=chunkKey(cx,cz);
-    if(!chunkMeshes.has(key)){
-      const grp=buildChunkMesh(cx,cz);
-      scene.add(grp);chunkMeshes.set(key,grp);
-    }
-  }
 }
 
 // ══════════════════════════════════════════════════════════════
-//  BLOCK OUTLINE
-// ══════════════════════════════════════════════════════════════
-const outlineMesh=new THREE.LineSegments(
-  new THREE.EdgesGeometry(new THREE.BoxGeometry(1.003,1.003,1.003)),
-  new THREE.LineBasicMaterial({color:0x000000})
-);
-outlineMesh.visible=false;scene.add(outlineMesh);
-
-// ══════════════════════════════════════════════════════════════
-//  RAYCAST
-// ══════════════════════════════════════════════════════════════
-let hitBlock=null,hitFace=null;
-function castRay(){
-  const dir=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
-  const ori=camera.position.clone();let prev=null;
-  for(let t=0.15;t<6;t+=0.04){
-    const x=Math.floor(ori.x+dir.x*t),y=Math.floor(ori.y+dir.y*t),z=Math.floor(ori.z+dir.z*t);
-    const b=getBlock(x,y,z);
-    if(b!==AIR&&!isWaterLike(b)&&b!==SNOW){
-      hitBlock=window.hitBlock={x,y,z};
-      hitFace=window.hitFace=prev?{x:prev.x-x,y:prev.y-y,z:prev.z-z}:{x:0,y:1,z:0};
-      outlineMesh.position.set(x+0.5,y+0.5,z+0.5);outlineMesh.visible=true;return;
-    }
-    prev={x,y,z};
-  }
-  hitBlock=window.hitBlock=null;hitFace=window.hitFace=null;outlineMesh.visible=false;
-}
-
-// ══════════════════════════════════════════════════════════════
-//  UI
+//  UI HELPERS
 // ══════════════════════════════════════════════════════════════
 function showMsg(txt){
   msgEl.textContent=txt;msgEl.style.opacity='1';
@@ -1186,13 +816,17 @@ function showMsg(txt){
 function makeIcon(type){
   const ic=document.createElement('canvas');ic.width=ic.height=30;
   const ctx=ic.getContext('2d');const tex=BLOCK_ICON[type];
-  if(tex&&tex.image)ctx.drawImage(tex.image,0,0,30,30);return ic;
+  if(tex&&tex.image){
+    if(type===TALL_GRASS){ctx.fillStyle='#7ecb4a';ctx.fillRect(0,0,30,30);}
+    ctx.drawImage(tex.image,0,0,30,30);
+  }
+  return ic;
 }
 function renderHotbar(){
   hotbarEl.innerHTML='';
   for(let i=0;i<8;i++){
     const slot=document.createElement('div');
-    slot.className='hslot'+(i===window.hotbarSel?' active':'');
+    slot.className='hslot'+(i===hotbarSel?' active':'');
     const t=hotbar[i];
     if(t!=null){
       slot.appendChild(makeIcon(t));
@@ -1213,7 +847,7 @@ function renderInv(){
     if(cnt>0){const c=document.createElement('span');c.className='icount';c.textContent=cnt;slot.appendChild(c);}
     slot.onclick=()=>{
       if(cnt>0||hotbar.includes(type)){
-        hotbar[window.hotbarSel]=type;
+        hotbar[hotbarSel]=type;
         selblockEl.textContent='Bloque: '+BLOCK_NAMES[type];
         renderHotbar();renderInv();
       }
@@ -1225,124 +859,282 @@ function renderInv(){
   });
 }
 
-// ══════════════════════════════════════════════════════════════
-//  OVERLAYS
-// ══════════════════════════════════════════════════════════════
-function updateOverlays(){
-  const fx=Math.floor(camera.position.x),fy=Math.floor(camera.position.y-0.5),fz=Math.floor(camera.position.z);
-  const b=getBlock(fx,fy,fz),bh=getBlock(fx,fy+1,fz);
-  waterOverlay.style.display=(isWaterLike(b)||isWaterLike(bh))?'block':'none';
-  snowOverlay.style.display=(b===SNOW||bh===SNOW)?'block':'none';
-}
-window.isInSnow=function(){
-  const fx=Math.floor(camera.position.x),fy=Math.floor(camera.position.y-0.2),fz=Math.floor(camera.position.z);
-  return getBlock(fx,fy,fz)===SNOW||getBlock(fx,fy-1,fz)===SNOW;
-};
-
-// ══════════════════════════════════════════════════════════════
-//  NUBES
-// ══════════════════════════════════════════════════════════════
-for(let i=0;i<35;i++){
-  const g=new THREE.BoxGeometry(10+Math.random()*20,1.2+Math.random()*0.8,7+Math.random()*14);
-  const m=new THREE.MeshLambertMaterial({color:0xffffff,transparent:true,opacity:0.85});
+// Nubes
+for(let i=0;i<50;i++){
+  const g=new THREE.BoxGeometry(10+Math.random()*28,1.3+Math.random()*1.2,7+Math.random()*18);
+  const m=new THREE.MeshLambertMaterial({color:0xffffff,transparent:true,opacity:0.88});
   const c=new THREE.Mesh(g,m);
-  c.position.set((Math.random()-0.5)*700,SEA_LEVEL+95+Math.random()*18,(Math.random()-0.5)*700);
+  c.position.set((Math.random()-0.5)*1000, 200+Math.random()*30,(Math.random()-0.5)*1000);
   scene.add(c);
 }
 
-// ══════════════════════════════════════════════════════════════
-//  CONTROLES RENDER DIST
-// ══════════════════════════════════════════════════════════════
 document.getElementById('rdlbl').textContent='Chunks: '+RENDER_DIST;
-document.getElementById('rdinc').onclick=()=>{
-  if(RENDER_DIST<RENDER_DIST_MAX){RENDER_DIST++;document.getElementById('rdlbl').textContent='Chunks: '+RENDER_DIST;lastCX=9999;}
-};
-document.getElementById('rddec').onclick=()=>{
-  if(RENDER_DIST>RENDER_DIST_MIN){RENDER_DIST--;document.getElementById('rdlbl').textContent='Chunks: '+RENDER_DIST;lastCX=9999;}
-};
+document.getElementById('rdinc').onclick=()=>{if(RENDER_DIST<20){RENDER_DIST++;document.getElementById('rdlbl').textContent='Chunks: '+RENDER_DIST;lastCX=9999;}};
+document.getElementById('rddec').onclick=()=>{if(RENDER_DIST>4){RENDER_DIST--;document.getElementById('rdlbl').textContent='Chunks: '+RENDER_DIST;lastCX=9999;}};
 
-// ══════════════════════════════════════════════════════════════
-//  SPAWN SEGURO
-// ══════════════════════════════════════════════════════════════
+// ── Spawn seguro ──
 function findSafeSpawn(){
-  for(let r=0;r<120;r++){
-    const angle=r*1.618*Math.PI*2,dist=r*0.8;
-    const sx=Math.round(Math.cos(angle)*dist),sz=Math.round(Math.sin(angle)*dist);
-    const biome=getBiome(sx,sz);
-    if(biome===BIOME.OCEAN||biome===BIOME.DEEP_OCEAN||biome===BIOME.SWAMP||biome===BIOME.MANGROVE)continue;
+  for(let r=0;r<400;r++){
+    const angle=r*1.618*Math.PI*2, dist=r*2.0;
+    const sx=Math.round(Math.cos(angle)*dist), sz=Math.round(Math.sin(angle)*dist);
+    const cont=getContinentalness(sx,sz);
+    // Preferir zonas de colinas suaves/medias
+    if(cont < -0.2 || cont > 0.45) continue;
     const surfH=getSurface(sx,sz);
-    if(surfH<=SEA_LEVEL+1)continue;
-    const spawnY=surfH+1;
-    let clear=true;
-    for(let dy=0;dy<3;dy++){if(getBlock(sx,spawnY+dy,sz)!==AIR){clear=false;break;}}
-    if(!clear)continue;
-    let wet=false;
-    for(let ddx=-1;ddx<=1&&!wet;ddx++){for(let ddz=-1;ddz<=1&&!wet;ddz++){if(isWaterLike(getBlock(sx+ddx,spawnY-1,sz+ddz)))wet=true;}}
-    if(!wet)return{x:sx+0.5,y:spawnY+0.2,z:sz+0.5};
+    if(surfH < 70 || surfH > 160) continue;
+    return{x:sx+0.5, y:surfH+2+1.62, z:sz+0.5};
   }
-  return{x:0.5,y:SEA_LEVEL+6,z:0.5};
+  const fallSurf=getSurface(0,0);
+  return{x:0.5, y:fallSurf+3+1.62, z:0.5};
 }
 
-// ── Globals ──
-window.getBlock=getBlock;window.setBlock=setBlock;
-window.hotbar=hotbar;window.inventory=inventory;
-window.addItem=addItem;window.removeItem=removeItem;window.hasItem=hasItem;
-window.BLOCK_NAMES=BLOCK_NAMES;window.selblockEl=selblockEl;window.showMsg=showMsg;
-window.renderHotbar=renderHotbar;window.renderInv=renderInv;
-window.blocker=blocker;window.invpanel=invpanel;
-window.hitBlock=hitBlock;window.hitFace=hitFace;window.castRay=castRay;
-window.getSurface=getSurface;window.getBiome=getBiome;
-window.camera=camera;window.scene=scene;
-window.hotbarSel=hotbarSel;
-window.BIOME=BIOME;
+// ══════════════════════════════════════════════════════════════
+//  PLAYER
+// ══════════════════════════════════════════════════════════════
+const PLAYER_HEIGHT = 1.62;
+const PLAYER_HALF_W = 0.29;
+const WALK_SPEED    = 4.3;
+const RUN_SPEED     = 9.0;
+const JUMP_FORCE    = 8.0;
+const GRAVITY_VAL   = -24;
 
-// ── Init ──
+let velY=0, onGround=false, isRunning=false, spectatorMode=false;
+let flySpeed=14;
+const FLY_SPEEDS=[8,14,22,40];
+let flySpeedIdx=1;
+
+function collidesAt(px,py,pz){
+  const x0=Math.floor(px-PLAYER_HALF_W),x1=Math.floor(px+PLAYER_HALF_W);
+  const z0=Math.floor(pz-PLAYER_HALF_W),z1=Math.floor(pz+PLAYER_HALF_W);
+  const y0=Math.floor(py-PLAYER_HEIGHT+0.001),y1=Math.floor(py+0.18-0.001);
+  for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++)for(let z=z0;z<=z1;z++)
+    if(isSolidForPlayer(getBlock(x,y,z)))return true;
+  return false;
+}
+
+const keys={}, mouseButtons={};
+let pitchDelta=0, yawDelta=0, pointerLocked=false;
+
+document.addEventListener('keydown', e=>{
+  keys[e.code]=true;
+  if(e.code==='KeyE'){
+    if(!pointerLocked)return;
+    const open=invpanel.style.display==='block';
+    invpanel.style.display=open?'none':'block';
+    if(!open)renderInv();
+  }
+  if(e.code==='KeyF'){spectatorMode=!spectatorMode;velY=0;stopBreaking();showMsg(spectatorMode?'👁 Espectador':'🧍 Jugador');}
+  if(e.code==='KeyR'&&spectatorMode){flySpeedIdx=(flySpeedIdx+1)%FLY_SPEEDS.length;flySpeed=FLY_SPEEDS[flySpeedIdx];showMsg('✈ '+flySpeed);}
+  if(e.code>='Digit1'&&e.code<='Digit8'){
+    hotbarSel=parseInt(e.code[5])-1;
+    const t=hotbar[hotbarSel];
+    selblockEl.textContent=t?'Bloque: '+(BLOCK_NAMES[t]||t):'Sin bloque';
+    renderHotbar();
+  }
+});
+document.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+blocker.addEventListener('click',()=>{ canvas.requestPointerLock(); });
+document.getElementById('invclose').addEventListener('click',()=>{ invpanel.style.display='none'; });
+
+document.addEventListener('pointerlockchange',()=>{
+  pointerLocked=!!document.pointerLockElement;
+  blocker.style.display=pointerLocked?'none':'flex';
+  if(!pointerLocked){invpanel.style.display='none';stopBreaking();}
+});
+document.addEventListener('mousemove', e=>{
+  if(!pointerLocked)return;
+  yawDelta-=e.movementX*0.002;
+  pitchDelta-=e.movementY*0.002;
+});
+document.addEventListener('mousedown', e=>{
+  mouseButtons[e.button]=true;
+  if(!pointerLocked||invpanel.style.display==='block')return;
+  if(e.button===2&&window.hitBlock&&window.hitFace){
+    const t=hotbar[hotbarSel];
+    if(t==null){showMsg('Sin bloque');return;}
+    if(!hasItem(t)){showMsg('Sin '+(BLOCK_NAMES[t]||t));return;}
+    const px=window.hitBlock.x+window.hitFace.x;
+    const py=window.hitBlock.y+window.hitFace.y;
+    const pz=window.hitBlock.z+window.hitFace.z;
+    const feetY=Math.floor(camera.position.y-PLAYER_HEIGHT);
+    const bx=Math.floor(camera.position.x),bz2=Math.floor(camera.position.z);
+    if(px===bx&&pz===bz2&&(py===feetY||py===feetY+1))return;
+    setBlock(px,py,pz,t);removeItem(t,1);renderHotbar();castRay();
+  }
+});
+document.addEventListener('mouseup', e=>{mouseButtons[e.button]=false;if(e.button===0)stopBreaking();});
+document.addEventListener('contextmenu', e=>e.preventDefault());
+document.addEventListener('wheel', e=>{
+  if(!pointerLocked)return;
+  if(spectatorMode){
+    flySpeedIdx=(flySpeedIdx+(e.deltaY>0?1:-1)+FLY_SPEEDS.length)%FLY_SPEEDS.length;
+    flySpeed=FLY_SPEEDS[flySpeedIdx];showMsg('✈ '+flySpeed);return;
+  }
+  hotbarSel=(hotbarSel+(e.deltaY>0?1:-1)+8)%8;
+  const t=hotbar[hotbarSel];
+  selblockEl.textContent=t?'Bloque: '+(BLOCK_NAMES[t]||t):'Sin bloque';
+  renderHotbar();
+},{passive:true});
+
+// Raycast
+const RAY_REACH=5.0, RAY_STEP=0.05;
+function castRay(){
+  const dir=new THREE.Vector3(0,0,-1).applyEuler(camera.rotation);
+  let lx=Math.floor(camera.position.x),ly=Math.floor(camera.position.y),lz=Math.floor(camera.position.z);
+  for(let d=0;d<RAY_REACH;d+=RAY_STEP){
+    const bx=Math.floor(camera.position.x+dir.x*d);
+    const by=Math.floor(camera.position.y+dir.y*d);
+    const bz=Math.floor(camera.position.z+dir.z*d);
+    const b=getBlock(bx,by,bz);
+    if(b!==AIR&&b!==TALL_GRASS){window.hitBlock={x:bx,y:by,z:bz};window.hitFace={x:lx-bx,y:ly-by,z:lz-bz};return;}
+    lx=bx;ly=by;lz=bz;
+  }
+  window.hitBlock=null;window.hitFace=null;
+}
+
+// Rotura de bloques
+const BLOCK_HARDNESS={
+  [GRASS]:2.0,[DIRT]:1.5,[STONE]:7.5,[WOOD]:4.0,[LEAVES]:0.8,[SAND]:1.5,[TALL_GRASS]:0.1,
+};
+let breakTarget=null,breakProgress=0,breakStage=-1,breakOverlayMesh=null;
+const BREAK_STAGES=10;
+const destroyTextures=[];
+for(let i=0;i<10;i++){
+  const t=new THREE.TextureLoader().load('textures/destroy_stage_'+i+'.png');
+  t.magFilter=t.minFilter=THREE.NearestFilter;t.generateMipmaps=false;
+  destroyTextures.push(t);
+}
+
+function stopBreaking(){
+  if(breakOverlayMesh){scene.remove(breakOverlayMesh);if(breakOverlayMesh.geometry)breakOverlayMesh.geometry.dispose();breakOverlayMesh=null;}
+  breakTarget=null;breakProgress=0;breakStage=-1;
+}
+function startBreaking(x,y,z){
+  if(breakTarget&&breakTarget.x===x&&breakTarget.y===y&&breakTarget.z===z)return;
+  stopBreaking();breakTarget={x,y,z};breakProgress=0;breakStage=-1;
+  const geo=new THREE.BoxGeometry(1.02,1.02,1.02);
+  const mat=new THREE.MeshBasicMaterial({map:destroyTextures[0],transparent:true,opacity:0.85,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
+  breakOverlayMesh=new THREE.Mesh(geo,mat);
+  breakOverlayMesh.position.set(x+0.5,y+0.5,z+0.5);
+  scene.add(breakOverlayMesh);
+}
+function finishBreaking(x,y,z,b){
+  if(b!==TALL_GRASS) addItem(b,1);
+  else addItem(TALL_GRASS,1);
+  setBlock(x,y,z,AIR);
+  showMsg('+ '+(BLOCK_NAMES[b]||'Bloque'));
+  renderHotbar();castRay();
+}
+function updateBreaking(dt){
+  if(!mouseButtons[0]||!window.hitBlock||spectatorMode){stopBreaking();return;}
+  const{x,y,z}=window.hitBlock;
+  startBreaking(x,y,z);
+  const b=getBlock(x,y,z);
+  const dur=BLOCK_HARDNESS[b]!==undefined?BLOCK_HARDNESS[b]:3.0;
+  if(dur<=0){finishBreaking(x,y,z,b);stopBreaking();return;}
+  breakProgress+=dt/dur;
+  const stage=Math.floor(breakProgress*BREAK_STAGES);
+  if(stage!==breakStage&&stage<BREAK_STAGES){breakStage=stage;if(breakOverlayMesh&&destroyTextures[stage])breakOverlayMesh.material.map=destroyTextures[Math.min(stage,9)];}
+  if(breakProgress>=1.0){finishBreaking(x,y,z,b);stopBreaking();}
+}
+
+// Item drops (simplificado)
+function updatePlayer(dt){
+  camera.rotation.y+=yawDelta;
+  camera.rotation.x=Math.max(-Math.PI/2+0.01,Math.min(Math.PI/2-0.01,camera.rotation.x+pitchDelta));
+  yawDelta=0;pitchDelta=0;
+
+  castRay();updateBreaking(dt);
+
+  if(spectatorMode){
+    const fwd=new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(0,camera.rotation.y,0));
+    const right=new THREE.Vector3(1,0,0).applyEuler(new THREE.Euler(0,camera.rotation.y,0));
+    const move=new THREE.Vector3();
+    if(keys['KeyW']||keys['ArrowUp'])    move.addScaledVector(fwd,1);
+    if(keys['KeyS']||keys['ArrowDown'])  move.addScaledVector(fwd,-1);
+    if(keys['KeyA']||keys['ArrowLeft'])  move.addScaledVector(right,-1);
+    if(keys['KeyD']||keys['ArrowRight']) move.addScaledVector(right,1);
+    if(keys['Space'])     move.y+=1;
+    if(keys['ShiftLeft']) move.y-=1;
+    if(move.lengthSq()>0)move.normalize();
+    camera.position.addScaledVector(move,flySpeed*dt);
+    return;
+  }
+
+  isRunning=keys['ShiftLeft'];
+  const speed=isRunning?RUN_SPEED:WALK_SPEED;
+  const fwd=new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(0,camera.rotation.y,0));
+  const right=new THREE.Vector3(1,0,0).applyEuler(new THREE.Euler(0,camera.rotation.y,0));
+  const move=new THREE.Vector3();
+  if(keys['KeyW']||keys['ArrowUp'])    move.addScaledVector(fwd,1);
+  if(keys['KeyS']||keys['ArrowDown'])  move.addScaledVector(fwd,-1);
+  if(keys['KeyA']||keys['ArrowLeft'])  move.addScaledVector(right,-1);
+  if(keys['KeyD']||keys['ArrowRight']) move.addScaledVector(right,1);
+  if(move.lengthSq()>0.001){move.y=0;move.normalize();}
+  if(keys['Space']&&onGround){velY=JUMP_FORCE;onGround=false;}
+  velY+=GRAVITY_VAL*dt;
+  velY=Math.max(velY,-60);
+  const pos=camera.position;
+  const dx2=move.x*speed*dt;
+  if(Math.abs(dx2)>0.0001){pos.x+=dx2;if(collidesAt(pos.x,pos.y,pos.z))pos.x-=dx2;}
+  const dz3=move.z*speed*dt;
+  if(Math.abs(dz3)>0.0001){pos.z+=dz3;if(collidesAt(pos.x,pos.y,pos.z))pos.z-=dz3;}
+  const dy2=velY*dt;
+  pos.y+=dy2;
+  if(collidesAt(pos.x,pos.y,pos.z)){onGround=dy2<0;pos.y-=dy2;velY=0;}
+  else{onGround=false;}
+  if(pos.y-PLAYER_HEIGHT<5){pos.y=80+PLAYER_HEIGHT;velY=0;onGround=true;}
+  if(pos.y>CHUNK_HEIGHT-2)pos.y=CHUNK_HEIGHT-2;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════
 (function init(){
   const sp=findSafeSpawn();
+  camera.position.set(sp.x,sp.y,sp.z);
+
   const pcx=Math.floor(sp.x/CHUNK_SIZE),pcz=Math.floor(sp.z/CHUNK_SIZE);
-  precacheArea(pcx,pcz,3);
-  const s=document.createElement('script');s.src='player.js';
-  s.onload=()=>{
-    window.hotbarSel=0;
-    camera.position.set(sp.x,sp.y,sp.z);
-    renderHotbar();renderInv();
-  };
-  s.onerror=()=>{camera.position.set(sp.x,sp.y,sp.z);renderHotbar();renderInv();console.warn('player.js no encontrado');};
-  document.body.appendChild(s);
+  for(let dx=-RENDER_DIST;dx<=RENDER_DIST;dx++){
+    for(let dz=-RENDER_DIST;dz<=RENDER_DIST;dz++){
+      if(dx*dx+dz*dz<=RENDER_DIST*RENDER_DIST){
+        const cx=pcx+dx,cz=pcz+dz;
+        generateChunk(cx,cz);
+        const grp=buildChunkMesh(cx,cz);
+        scene.add(grp);chunkMeshes.set(chunkKey(cx,cz),grp);
+      }
+    }
+  }
+  renderHotbar();renderInv();
 })();
 
 // ══════════════════════════════════════════════════════════════
-//  LOOP PRINCIPAL
+//  LOOP
 // ══════════════════════════════════════════════════════════════
-const clock=new THREE.Clock();let frame=0;
+let frame=0, lastTime=performance.now();
+
 function animate(){
   requestAnimationFrame(animate);
-  const dt=Math.min(clock.getDelta(),0.05);
-  frame++;
+  const now=performance.now();
+  const dt=Math.min((now-lastTime)/1000, 0.05);
+  lastTime=now; frame++;
 
-  if(typeof updatePlayer==='function')updatePlayer(dt);
-
-  if(frame%2===0)processSand();
-  updateSandEntities(dt);
-  if(frame%2===0)processWater();
-
-  if(frame%4===0){updateChunks();flushDirty();}
-  if(frame%3===0)updateFrustumCulling();
-  if(frame%8===0)updateOverlays();
-
+  updatePlayer(dt);
+  if(frame%10===0)updateChunks();
   renderer.render(scene,camera);
 
   if(frame%20===0){
     const info=renderer.info;
     const bx=Math.floor(camera.position.x),bwY=Math.floor(camera.position.y),bz=Math.floor(camera.position.z);
-    const biome=getBiome(bx,bz),surfH=getSurface(bx,bz);
-    const modeTag=(typeof spectatorMode!=='undefined'&&spectatorMode)?' · 👁 ESP':'';
-    const pendCount=pendingWorker.size;
+    const cont=getContinentalness(bx,bz);
+    const surfH=getSurface(bx,bz);
+    const splineH=Math.round(evalSpline(cont));
     hud.innerHTML=
       `Pos: ${camera.position.x.toFixed(1)}, ${bwY}, ${camera.position.z.toFixed(1)}<br>`+
-      `Sup: Y${surfH} | Bioma: ${BIOME_NAMES[biome]}${modeTag}<br>`+
-      `Chunks: ${chunkMeshes.size} | Tris: ${info.render.triangles.toLocaleString()}`+
-      (pendCount>0?` | Gen: ${pendCount}`:'');
+      `Sup: Y${surfH} | Spline: ${splineH} | C: ${cont.toFixed(3)}<br>`+
+      `Terreno: ${getTerrainName(cont)}<br>`+
+      `Chunks: ${chunkMeshes.size} | Tris: ${info.render.triangles.toLocaleString()}`;
   }
 }
 animate();
